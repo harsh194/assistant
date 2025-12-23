@@ -6,7 +6,7 @@ A powerful, real-time AI assistant designed to provide contextual help during vi
 
 ## 🌟 Features
 
--   **Live AI Assistance**: Powered by the cutting-edge **Google Gemini 2.5 Flash Live** model for rapid, accurate responses.
+-   **Live AI Assistance**: Powered by the cutting-edge **Google Gemini** model for rapid, accurate responses.
 -   **Contextual Awareness**: Analyzes both **screen content** and **system/microphone audio** to understand what is happening in real-time.
 -   **Specialized Profiles**: Tailored modes for various scenarios:
     -   Interview
@@ -39,7 +39,7 @@ A powerful, real-time AI assistant designed to provide contextual help during vi
 
 1.  **Clone the repository**
     ```bash
-    git clone https://github.com/yourusername/assistant.git
+    git clone https://github.com/harsh194/assistant.git
     cd assistant
     ```
 
