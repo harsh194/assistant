@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(npm start)",
+      "Bash(npm run *)",
+      "Bash(electron-forge *)",
+      "Bash(git *)",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "Bash(dir /b /s \"C:\\\\Users\\\\Harsh\\\\.claude\\\\plugins\\\\marketplaces\\\\everything-claude-code\\\\skills\")"
+    ]
+  }
+}

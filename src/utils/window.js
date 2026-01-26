@@ -445,35 +445,39 @@ function setupWindowIpcHandlers(mainWindow, sendToRenderer, geminiSessionRef) {
             let targetWidth, targetHeight;
 
             // Determine base size from layout mode
-            const baseWidth = layoutMode === 'compact' ? 700 : 900;
-            const baseHeight = layoutMode === 'compact' ? 500 : 600;
+            const prefs = storage.getPreferences();
+            const baseWidth = prefs.windowWidth || 500;
+            const baseHeight = prefs.windowHeight || (layoutMode === 'compact' ? 500 : 600);
 
-            // Adjust height based on view
-            switch (viewName) {
-                case 'main':
-                    targetWidth = baseWidth;
-                    targetHeight = layoutMode === 'compact' ? 320 : 400;
-                    break;
-                case 'customize':
-                case 'settings':
-                    targetWidth = baseWidth;
-                    targetHeight = layoutMode === 'compact' ? 700 : 800;
-                    break;
-                case 'help':
-                    targetWidth = baseWidth;
-                    targetHeight = layoutMode === 'compact' ? 650 : 750;
-                    break;
-                case 'history':
-                    targetWidth = baseWidth;
-                    targetHeight = layoutMode === 'compact' ? 650 : 750;
-                    break;
-                case 'assistant':
-                case 'onboarding':
-                default:
-                    targetWidth = baseWidth;
-                    targetHeight = baseHeight;
-                    break;
-            }
+            targetWidth = baseWidth;
+            targetHeight = baseHeight;
+
+            // // Adjust height based on view
+            // switch (viewName) {
+            //     case 'main':
+            //         targetWidth = baseWidth;
+            //         targetHeight = layoutMode === 'compact' ? 320 : 400;
+            //         break;
+            //     case 'customize':
+            //     case 'settings':
+            //         targetWidth = baseWidth;
+            //         targetHeight = layoutMode === 'compact' ? 700 : 800;
+            //         break;
+            //     case 'help':
+            //         targetWidth = baseWidth;
+            //         targetHeight = layoutMode === 'compact' ? 650 : 750;
+            //         break;
+            //     case 'history':
+            //         targetWidth = baseWidth;
+            //         targetHeight = layoutMode === 'compact' ? 650 : 750;
+            //         break;
+            //     case 'assistant':
+            //     case 'onboarding':
+            //     default:
+            //         targetWidth = baseWidth;
+            //         targetHeight = baseHeight;
+            //         break;
+            // }
 
             const [currentWidth, currentHeight] = mainWindow.getSize();
             console.log('Current window size:', currentWidth, 'x', currentHeight);

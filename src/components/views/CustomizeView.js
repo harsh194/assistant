@@ -549,6 +549,10 @@ export class CustomizeView extends LitElement {
         onLanguageChange: { type: Function },
         onImageQualityChange: { type: Function },
         onLayoutModeChange: { type: Function },
+        windowWidth: { type: Number },
+        onWindowWidthChange: { type: Function },
+        windowHeight: { type: Number },
+        onWindowHeightChange: { type: Function },
         activeSection: { type: String },
         isClearing: { type: Boolean },
         clearStatusMessage: { type: String },
@@ -566,6 +570,10 @@ export class CustomizeView extends LitElement {
         this.onLanguageChange = () => { };
         this.onImageQualityChange = () => { };
         this.onLayoutModeChange = () => { };
+        this.windowWidth = 500;
+        this.onWindowWidthChange = () => { };
+        this.windowHeight = 600;
+        this.onWindowHeightChange = () => { };
 
         // Google Search default
         this.googleSearchEnabled = true;
@@ -799,6 +807,16 @@ export class CustomizeView extends LitElement {
     handleLayoutModeSelect(e) {
         this.layoutMode = e.target.value;
         this.onLayoutModeChange(e.target.value);
+    }
+
+    handleWindowWidthChange(e) {
+        this.windowWidth = parseInt(e.target.value, 10);
+        this.onWindowWidthChange(this.windowWidth);
+    }
+
+    handleWindowHeightChange(e) {
+        this.windowHeight = parseInt(e.target.value, 10);
+        this.onWindowHeightChange(this.windowHeight);
     }
 
     async handleCustomPromptInput(e) {
@@ -1251,6 +1269,50 @@ export class CustomizeView extends LitElement {
                         <div class="slider-labels">
                             <span>12px</span>
                             <span>32px</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="slider-container">
+                        <div class="slider-header">
+                            <label class="form-label">Window Width</label>
+                            <span class="slider-value">${this.windowWidth}px</span>
+                        </div>
+                        <input
+                            type="range"
+                            class="slider-input"
+                            min="300"
+                            max="1000"
+                            step="10"
+                            .value=${this.windowWidth}
+                            @input=${this.handleWindowWidthChange}
+                        />
+                        <div class="slider-labels">
+                            <span>300px</span>
+                            <span>1000px</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="slider-container">
+                        <div class="slider-header">
+                            <label class="form-label">Window Height</label>
+                            <span class="slider-value">${this.windowHeight}px</span>
+                        </div>
+                        <input
+                            type="range"
+                            class="slider-input"
+                            min="300"
+                            max="1200"
+                            step="10"
+                            .value=${this.windowHeight}
+                            @input=${this.handleWindowHeightChange}
+                        />
+                        <div class="slider-labels">
+                            <span>300px</span>
+                            <span>1200px</span>
                         </div>
                     </div>
                 </div>

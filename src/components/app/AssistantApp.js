@@ -105,6 +105,8 @@ export class AssistantApp extends LitElement {
         selectedScreenshotInterval: { type: String },
         selectedImageQuality: { type: String },
         layoutMode: { type: String },
+        windowWidth: { type: Number },
+        windowHeight: { type: Number },
         _viewInstances: { type: Object, state: true },
         _isClickThrough: { state: true },
         _awaitingNewResponse: { state: true },
@@ -125,6 +127,8 @@ export class AssistantApp extends LitElement {
         this.selectedScreenshotInterval = '5';
         this.selectedImageQuality = 'medium';
         this.layoutMode = 'normal';
+        this.windowWidth = 500;
+        this.windowHeight = 600;
         this.responses = [];
         this.currentResponseIndex = -1;
         this._viewInstances = new Map();
@@ -160,6 +164,8 @@ export class AssistantApp extends LitElement {
             this.selectedScreenshotInterval = prefs.selectedScreenshotInterval || '5';
             this.selectedImageQuality = prefs.selectedImageQuality || 'medium';
             this.layoutMode = config.layout || 'normal';
+            this.windowWidth = prefs.windowWidth || 500;
+            this.windowHeight = prefs.windowHeight || 600;
 
             this._storageLoaded = true;
             this.updateLayoutMode();
@@ -467,11 +473,15 @@ export class AssistantApp extends LitElement {
                         .selectedScreenshotInterval=${this.selectedScreenshotInterval}
                         .selectedImageQuality=${this.selectedImageQuality}
                         .layoutMode=${this.layoutMode}
+                        .windowWidth=${this.windowWidth}
+                        .windowHeight=${this.windowHeight}
                         .onProfileChange=${profile => this.handleProfileChange(profile)}
                         .onLanguageChange=${language => this.handleLanguageChange(language)}
                         .onScreenshotIntervalChange=${interval => this.handleScreenshotIntervalChange(interval)}
                         .onImageQualityChange=${quality => this.handleImageQualityChange(quality)}
                         .onLayoutModeChange=${layoutMode => this.handleLayoutModeChange(layoutMode)}
+                        .onWindowWidthChange=${width => this.handleWindowWidthChange(width)}
+                        .onWindowHeightChange=${height => this.handleWindowHeightChange(height)}
                     ></customize-view>
                 `;
 
@@ -552,6 +562,40 @@ export class AssistantApp extends LitElement {
         this.updateLayoutMode();
 
         // Notify main process about layout change for window resizing
+        if (window.require) {
+            try {
+                const { ipcRenderer } = window.require('electron');
+                await ipcRenderer.invoke('update-sizes');
+            } catch (error) {
+                console.error('Failed to update sizes in main process:', error);
+            }
+        }
+
+        this.requestUpdate();
+    }
+
+    async handleWindowWidthChange(width) {
+        this.windowWidth = width;
+        await assistant.storage.updatePreference('windowWidth', width);
+
+        // Notify main process about width change for window resizing
+        if (window.require) {
+            try {
+                const { ipcRenderer } = window.require('electron');
+                await ipcRenderer.invoke('update-sizes');
+            } catch (error) {
+                console.error('Failed to update sizes in main process:', error);
+            }
+        }
+
+        this.requestUpdate();
+    }
+
+    async handleWindowHeightChange(height) {
+        this.windowHeight = height;
+        await assistant.storage.updatePreference('windowHeight', height);
+
+        // Notify main process about height change for window resizing
         if (window.require) {
             try {
                 const { ipcRenderer } = window.require('electron');

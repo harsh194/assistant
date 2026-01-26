@@ -25,7 +25,9 @@ const DEFAULT_PREFERENCES = {
     audioMode: 'speaker_only',
     fontSize: 'medium',
     backgroundTransparency: 0.8,
-    googleSearchEnabled: false
+    googleSearchEnabled: false,
+    windowWidth: 500,
+    windowHeight: 600
 };
 
 const DEFAULT_KEYBINDS = null; // null means use system defaults
