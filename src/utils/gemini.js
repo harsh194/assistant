@@ -580,6 +580,9 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
         // Save screen analysis to history
         saveScreenAnalysis(prompt, fullText, model);
 
+        // Notify renderer that response is complete
+        sendToRenderer('response-complete', { model: model });
+
         return { success: true, text: fullText, model: model };
     } catch (error) {
         console.error('Error sending image to Gemini HTTP:', error);

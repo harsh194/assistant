@@ -1,4 +1,6 @@
 import { html, css, LitElement } from '../../assets/lit-core-2.7.4.min.js';
+import { RequestState, isRequestInProgress } from '../../utils/requestState.js';
+import '../ui/RequestStatus.js';
 
 export class AssistantView extends LitElement {
     static styles = css`
@@ -314,6 +316,24 @@ export class AssistantView extends LitElement {
             opacity: 0.5;
             font-size: 10px;
         }
+
+        .screen-answer-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .screen-answer-btn:disabled:hover {
+            background: var(--btn-primary-bg, #ffffff);
+        }
+
+        .request-status-container {
+            margin-bottom: 8px;
+        }
+
+        .input-disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
     `;
 
     static properties = {
@@ -324,6 +344,9 @@ export class AssistantView extends LitElement {
         shouldAnimateResponse: { type: Boolean },
         flashCount: { type: Number },
         flashLiteCount: { type: Number },
+        requestState: { type: String },
+        requestStartTime: { type: Number },
+        elapsedTime: { type: Number },
     };
 
     constructor() {
@@ -334,6 +357,10 @@ export class AssistantView extends LitElement {
         this.onSendText = () => { };
         this.flashCount = 0;
         this.flashLiteCount = 0;
+        this.requestState = RequestState.IDLE;
+        this.requestStartTime = null;
+        this.elapsedTime = 0;
+        this._elapsedTimer = null;
     }
 
     getProfileNames() {
@@ -478,15 +505,39 @@ export class AssistantView extends LitElement {
                 this.scrollResponseDown();
             };
 
+            // Request state handlers
+            this.handleNewResponse = () => {
+                this._setRequestState(RequestState.STREAMING);
+            };
+
+            this.handleResponseComplete = () => {
+                this._setRequestState(RequestState.DONE);
+                setTimeout(() => this._setRequestState(RequestState.IDLE), 500);
+            };
+
+            this.handleRequestCancelled = () => {
+                this._setRequestState(RequestState.CANCELLED);
+                setTimeout(() => this._setRequestState(RequestState.IDLE), 1500);
+            };
+
             ipcRenderer.on('navigate-previous-response', this.handlePreviousResponse);
             ipcRenderer.on('navigate-next-response', this.handleNextResponse);
             ipcRenderer.on('scroll-response-up', this.handleScrollUp);
             ipcRenderer.on('scroll-response-down', this.handleScrollDown);
+            ipcRenderer.on('new-response', this.handleNewResponse);
+            ipcRenderer.on('response-complete', this.handleResponseComplete);
+            ipcRenderer.on('request-cancelled', this.handleRequestCancelled);
         }
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
+
+        // Clean up elapsed timer
+        if (this._elapsedTimer) {
+            clearInterval(this._elapsedTimer);
+            this._elapsedTimer = null;
+        }
 
         // Clean up IPC listeners
         if (window.require) {
@@ -503,7 +554,61 @@ export class AssistantView extends LitElement {
             if (this.handleScrollDown) {
                 ipcRenderer.removeListener('scroll-response-down', this.handleScrollDown);
             }
+            if (this.handleNewResponse) {
+                ipcRenderer.removeListener('new-response', this.handleNewResponse);
+            }
+            if (this.handleResponseComplete) {
+                ipcRenderer.removeListener('response-complete', this.handleResponseComplete);
+            }
+            if (this.handleRequestCancelled) {
+                ipcRenderer.removeListener('request-cancelled', this.handleRequestCancelled);
+            }
         }
+    }
+
+    _setRequestState(state) {
+        this.requestState = state;
+
+        if (state === RequestState.THINKING || state === RequestState.SENDING) {
+            this.requestStartTime = Date.now();
+            this._startElapsedTimer();
+        } else if (state === RequestState.DONE || state === RequestState.ERROR || state === RequestState.CANCELLED || state === RequestState.IDLE) {
+            this._stopElapsedTimer();
+            this.elapsedTime = 0;
+            this.requestStartTime = null;
+        }
+
+        this.requestUpdate();
+    }
+
+    _startElapsedTimer() {
+        if (this._elapsedTimer) {
+            clearInterval(this._elapsedTimer);
+        }
+        this._elapsedTimer = setInterval(() => {
+            if (this.requestStartTime) {
+                this.elapsedTime = Date.now() - this.requestStartTime;
+                this.requestUpdate();
+            }
+        }, 1000);
+    }
+
+    _stopElapsedTimer() {
+        if (this._elapsedTimer) {
+            clearInterval(this._elapsedTimer);
+            this._elapsedTimer = null;
+        }
+    }
+
+    _handleCancelRequest() {
+        if (window.require) {
+            const { ipcRenderer } = window.require('electron');
+            ipcRenderer.invoke('cancel-current-request');
+        }
+    }
+
+    _isRequestInProgress() {
+        return isRequestInProgress(this.requestState);
     }
 
     async handleSendText() {
@@ -511,7 +616,17 @@ export class AssistantView extends LitElement {
         if (textInput && textInput.value.trim()) {
             const message = textInput.value.trim();
             textInput.value = ''; // Clear input
+
+            // Set thinking state before sending
+            this._setRequestState(RequestState.THINKING);
+
             const result = await assistant.sendTextMessage(message);
+
+            if (!result.success) {
+                this._setRequestState(RequestState.ERROR);
+                setTimeout(() => this._setRequestState(RequestState.IDLE), 2000);
+            }
+            // Note: Success state transitions are handled by IPC events (new-response -> STREAMING -> DONE)
         }
     }
 
@@ -539,7 +654,15 @@ export class AssistantView extends LitElement {
     }
 
     async handleScreenAnswer() {
+        // Prevent multiple clicks while processing
+        if (this._isRequestInProgress()) {
+            return;
+        }
+
         if (window.captureManualScreenshot) {
+            // Set thinking state before capturing
+            this._setRequestState(RequestState.THINKING);
+
             window.captureManualScreenshot();
             // Reload limits after a short delay to catch the update
             setTimeout(() => this.loadLimits(), 1000);
@@ -587,9 +710,20 @@ export class AssistantView extends LitElement {
 
     render() {
         const responseCounter = this.getResponseCounter();
+        const inProgress = this._isRequestInProgress();
 
         return html`
             <div class="response-container" id="responseContainer"></div>
+
+            ${inProgress ? html`
+                <div class="request-status-container">
+                    <request-status
+                        .state=${this.requestState}
+                        .elapsedTime=${this.elapsedTime}
+                        @cancel=${this._handleCancelRequest}
+                    ></request-status>
+                </div>
+            ` : ''}
 
             <div class="text-input-container">
                 <button class="nav-button" @click=${this.navigateToPreviousResponse} ?disabled=${this.currentResponseIndex <= 0}>
@@ -606,7 +740,14 @@ export class AssistantView extends LitElement {
                     </svg>
                 </button>
 
-                <input type="text" id="textInput" placeholder="Type a message to the AI..." @keydown=${this.handleTextKeydown} />
+                <input
+                    type="text"
+                    id="textInput"
+                    placeholder="${inProgress ? 'Processing...' : 'Type a message to the AI...'}"
+                    @keydown=${this.handleTextKeydown}
+                    ?disabled=${inProgress}
+                    class="${inProgress ? 'input-disabled' : ''}"
+                />
 
                 <div class="screen-answer-btn-wrapper">
                     <div class="tooltip">
@@ -620,11 +761,11 @@ export class AssistantView extends LitElement {
                         </div>
                         <div class="tooltip-note">Resets every 24 hours</div>
                     </div>
-                    <button class="screen-answer-btn" @click=${this.handleScreenAnswer}>
+                    <button class="screen-answer-btn" @click=${this.handleScreenAnswer} ?disabled=${inProgress}>
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                             <path d="M15.98 1.804a1 1 0 0 0-1.96 0l-.24 1.192a1 1 0 0 1-.784.785l-1.192.238a1 1 0 0 0 0 1.962l1.192.238a1 1 0 0 1 .785.785l.238 1.192a1 1 0 0 0 1.962 0l.238-1.192a1 1 0 0 1 .785-.785l1.192-.238a1 1 0 0 0 0-1.962l-1.192-.238a1 1 0 0 1-.785-.785l-.238-1.192ZM6.949 5.684a1 1 0 0 0-1.898 0l-.683 2.051a1 1 0 0 1-.633.633l-2.051.683a1 1 0 0 0 0 1.898l2.051.684a1 1 0 0 1 .633.632l.683 2.051a1 1 0 0 0 1.898 0l.683-2.051a1 1 0 0 1 .633-.633l2.051-.683a1 1 0 0 0 0-1.898l-2.051-.683a1 1 0 0 1-.633-.633L6.95 5.684ZM13.949 13.684a1 1 0 0 0-1.898 0l-.184.551a1 1 0 0 1-.632.633l-.551.183a1 1 0 0 0 0 1.898l.551.183a1 1 0 0 1 .633.633l.183.551a1 1 0 0 0 1.898 0l.184-.551a1 1 0 0 1 .632-.633l.551-.183a1 1 0 0 0 0-1.898l-.551-.184a1 1 0 0 1-.633-.632l-.183-.551Z" />
                         </svg>
-                        <span>Analyze screen</span>
+                        <span>${inProgress ? 'Processing...' : 'Analyze screen'}</span>
                         <span class="usage-count">(${this.getTotalUsed()}/${this.getTotalAvailable()})</span>
                     </button>
                 </div>
