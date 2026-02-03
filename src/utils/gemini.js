@@ -256,6 +256,9 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
                                 saveConversationTurn(currentTranscription, messageBuffer);
                                 currentTranscription = ''; // Reset for next turn
                             }
+
+                            // Notify renderer that response generation is complete
+                            sendToRenderer('response-complete', { source: 'live-session' });
                         }
                         messageBuffer = '';
                     }
@@ -601,6 +604,24 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
             return true;
         }
         return false;
+    });
+
+    // Cancel current request handler
+    ipcMain.handle('cancel-current-request', async () => {
+        try {
+            console.log('Cancel request received');
+            // Clear message buffer to stop any ongoing response
+            messageBuffer = '';
+            currentTranscription = '';
+
+            // Notify renderer that request was cancelled
+            sendToRenderer('request-cancelled', {});
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error cancelling request:', error);
+            return { success: false, error: error.message };
+        }
     });
 
     ipcMain.handle('send-audio-content', async (event, { data, mimeType }) => {

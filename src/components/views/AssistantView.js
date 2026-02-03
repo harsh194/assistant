@@ -520,6 +520,25 @@ export class AssistantView extends LitElement {
                 setTimeout(() => this._setRequestState(RequestState.IDLE), 1500);
             };
 
+            // Fallback: listen for status updates that indicate completion
+            this.handleStatusUpdate = (event, status) => {
+                if (typeof status === 'string') {
+                    const lowerStatus = status.toLowerCase();
+                    // Only reset to IDLE from STREAMING state (response was received and completed)
+                    // Don't reset from THINKING - we might still be waiting for a response
+                    if (lowerStatus.includes('listening') || lowerStatus.includes('ready')) {
+                        if (this.requestState === RequestState.STREAMING) {
+                            this._setRequestState(RequestState.IDLE);
+                        }
+                    }
+                    // If status indicates error, set ERROR state
+                    if (lowerStatus.includes('error')) {
+                        this._setRequestState(RequestState.ERROR);
+                        setTimeout(() => this._setRequestState(RequestState.IDLE), 2000);
+                    }
+                }
+            };
+
             ipcRenderer.on('navigate-previous-response', this.handlePreviousResponse);
             ipcRenderer.on('navigate-next-response', this.handleNextResponse);
             ipcRenderer.on('scroll-response-up', this.handleScrollUp);
@@ -527,6 +546,7 @@ export class AssistantView extends LitElement {
             ipcRenderer.on('new-response', this.handleNewResponse);
             ipcRenderer.on('response-complete', this.handleResponseComplete);
             ipcRenderer.on('request-cancelled', this.handleRequestCancelled);
+            ipcRenderer.on('update-status', this.handleStatusUpdate);
         }
     }
 
@@ -562,6 +582,9 @@ export class AssistantView extends LitElement {
             }
             if (this.handleRequestCancelled) {
                 ipcRenderer.removeListener('request-cancelled', this.handleRequestCancelled);
+            }
+            if (this.handleStatusUpdate) {
+                ipcRenderer.removeListener('update-status', this.handleStatusUpdate);
             }
         }
     }
@@ -601,9 +624,21 @@ export class AssistantView extends LitElement {
     }
 
     _handleCancelRequest() {
+        // Immediately set state to cancelled for responsive UI
+        this._setRequestState(RequestState.CANCELLED);
+
         if (window.require) {
             const { ipcRenderer } = window.require('electron');
-            ipcRenderer.invoke('cancel-current-request');
+            ipcRenderer.invoke('cancel-current-request').then(() => {
+                // After backend confirms, transition to IDLE
+                setTimeout(() => this._setRequestState(RequestState.IDLE), 500);
+            }).catch((error) => {
+                console.error('Error cancelling request:', error);
+                this._setRequestState(RequestState.IDLE);
+            });
+        } else {
+            // No IPC available, just reset to IDLE
+            setTimeout(() => this._setRequestState(RequestState.IDLE), 500);
         }
     }
 
