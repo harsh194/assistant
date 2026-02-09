@@ -92,6 +92,18 @@ const storage = {
         return ipcRenderer.invoke('storage:delete-all-sessions');
     },
 
+    // Co-Pilot Prep
+    async getCoPilotPrep() {
+        const result = await ipcRenderer.invoke('storage:get-copilot-prep');
+        return result.success ? result.data : {};
+    },
+    async setCoPilotPrep(data) {
+        return ipcRenderer.invoke('storage:set-copilot-prep', data);
+    },
+    async updateCoPilotPrep(key, value) {
+        return ipcRenderer.invoke('storage:update-copilot-prep', key, value);
+    },
+
     // Clear all
     async clearAll() {
         return ipcRenderer.invoke('storage:clear-all');
@@ -135,11 +147,11 @@ function arrayBufferToBase64(buffer) {
     return btoa(binary);
 }
 
-async function initializeGemini(profile = 'interview', language = 'en-US') {
+async function initializeGemini(profile = 'interview', language = 'en-US', copilotPrep = null) {
     const apiKey = await storage.getApiKey();
     if (apiKey) {
         const prefs = await storage.getPreferences();
-        const success = await ipcRenderer.invoke('initialize-gemini', apiKey, prefs.customPrompt || '', profile, language);
+        const success = await ipcRenderer.invoke('initialize-gemini', apiKey, prefs.customPrompt || '', profile, language, copilotPrep);
         if (success) {
             assistant.setStatus('Live');
         } else {
@@ -942,6 +954,20 @@ const assistant = {
     stopCapture,
     sendTextMessage,
     handleShortcut,
+
+    // Co-Pilot document operations
+    openFileDialog: async () => {
+        return ipcRenderer.invoke('copilot:open-file-dialog');
+    },
+    parseDocument: async (filePath) => {
+        return ipcRenderer.invoke('copilot:parse-document', filePath);
+    },
+    generateSummary: async (data) => {
+        return ipcRenderer.invoke('copilot:generate-summary', data);
+    },
+    exportNotes: async (data) => {
+        return ipcRenderer.invoke('copilot:export-notes', data);
+    },
 
     // Storage API
     storage,

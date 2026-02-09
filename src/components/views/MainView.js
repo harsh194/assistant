@@ -82,6 +82,25 @@ export class MainView extends LitElement {
             background: var(--start-button-hover-background);
         }
 
+        .prepare-button {
+            background: transparent;
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 10px 16px;
+            border-radius: 3px;
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.1s ease;
+        }
+
+        .prepare-button:hover {
+            background: var(--hover-background);
+        }
+
         .start-button.initializing {
             opacity: 0.5;
             cursor: not-allowed;
@@ -126,6 +145,7 @@ export class MainView extends LitElement {
 
     static properties = {
         onStart: { type: Function },
+        onPrepare: { type: Function },
         onAPIKeyHelp: { type: Function },
         isInitializing: { type: Boolean },
         onLayoutModeChange: { type: Function },
@@ -135,6 +155,7 @@ export class MainView extends LitElement {
     constructor() {
         super();
         this.onStart = () => { };
+        this.onPrepare = () => { };
         this.onAPIKeyHelp = () => { };
         this.isInitializing = false;
         this.onLayoutModeChange = () => { };
@@ -230,6 +251,10 @@ export class MainView extends LitElement {
                     ${this.getStartButtonText()}
                 </button>
             </div>
+
+            <button @click=${() => this.onPrepare()} class="prepare-button">
+                Prepare Session
+            </button>
         `;
     }
 }

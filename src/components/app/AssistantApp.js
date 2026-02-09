@@ -6,6 +6,8 @@ import { HelpView } from '../views/HelpView.js';
 import { HistoryView } from '../views/HistoryView.js';
 import { AssistantView } from '../views/AssistantView.js';
 import { OnboardingView } from '../views/OnboardingView.js';
+import { SessionPrepView } from '../views/SessionPrepView.js';
+import { SessionSummaryView } from '../views/SessionSummaryView.js';
 
 export class AssistantApp extends LitElement {
     static styles = css`
@@ -112,6 +114,9 @@ export class AssistantApp extends LitElement {
         _awaitingNewResponse: { state: true },
         shouldAnimateResponse: { type: Boolean },
         _storageLoaded: { state: true },
+        copilotActive: { type: Boolean },
+        copilotPrep: { type: Object },
+        accumulatedNotes: { type: Object },
     };
 
     constructor() {
@@ -137,6 +142,10 @@ export class AssistantApp extends LitElement {
         this._currentResponseIsComplete = true;
         this.shouldAnimateResponse = false;
         this._storageLoaded = false;
+        this.copilotActive = false;
+        this.copilotPrep = null;
+        this.accumulatedNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
+        this._copilotSessionId = null;
 
         // Load from storage
         this._loadFromStorage();
@@ -310,16 +319,56 @@ export class AssistantApp extends LitElement {
         if (this.currentView === 'customize' || this.currentView === 'help' || this.currentView === 'history') {
             this.currentView = 'main';
         } else if (this.currentView === 'assistant') {
+            // Grab accumulated notes from the assistant view before closing
+            const assistantView = this.shadowRoot.querySelector('assistant-view');
+            if (assistantView && this.copilotActive) {
+                this.accumulatedNotes = assistantView.getSessionNotes();
+            }
+
             assistant.stopCapture();
 
-            // Close the session
+            // Close the session and save co-pilot data if active
             if (window.require) {
                 const { ipcRenderer } = window.require('electron');
+
+                // Save co-pilot data to the session before closing
+                if (this.copilotActive) {
+                    const sessionData = await ipcRenderer.invoke('get-current-session');
+                    if (sessionData.success && sessionData.data.sessionId) {
+                        this._copilotSessionId = sessionData.data.sessionId;
+                        await assistant.storage.saveSession(sessionData.data.sessionId, {
+                            copilotPrep: this.copilotPrep,
+                            sessionNotes: this.accumulatedNotes,
+                        });
+                    }
+                }
+
                 await ipcRenderer.invoke('close-session');
             }
             this.sessionActive = false;
-            this.currentView = 'main';
+
+            // Navigate to summary view for co-pilot sessions, otherwise back to main
+            if (this.copilotActive) {
+                this.currentView = 'session-summary';
+            } else {
+                this.currentView = 'main';
+            }
             console.log('Session closed');
+        } else if (this.currentView === 'session-summary') {
+            // Save summary to session history before leaving
+            const summaryView = this.shadowRoot.querySelector('session-summary-view');
+            if (summaryView && this._copilotSessionId && summaryView._summary) {
+                await assistant.storage.saveSession(this._copilotSessionId, {
+                    summary: summaryView._summary,
+                });
+            }
+
+            // Done viewing summary, reset co-pilot state and go to main
+            this.copilotActive = false;
+            this.copilotPrep = null;
+            this.accumulatedNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
+            this._copilotSessionId = null;
+            this.currentView = 'main';
         } else {
             // Quit the entire application
             if (window.require) {
@@ -351,6 +400,30 @@ export class AssistantApp extends LitElement {
 
         await assistant.initializeGemini(this.selectedProfile, this.selectedLanguage);
         // Pass the screenshot interval as string (including 'manual' option)
+        assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
+        this.responses = [];
+        this.currentResponseIndex = -1;
+        this.startTime = Date.now();
+        this.currentView = 'assistant';
+    }
+
+    handlePrepareClick() {
+        this.currentView = 'session-prep';
+        this.requestUpdate();
+    }
+
+    async handleStartSession(prepData) {
+        const apiKey = await assistant.storage.getApiKey();
+        if (!apiKey) {
+            this.currentView = 'main';
+            return;
+        }
+
+        this.copilotActive = true;
+        this.copilotPrep = prepData;
+        this.accumulatedNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
+
+        await assistant.initializeGemini(this.selectedProfile, this.selectedLanguage, prepData);
         assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
         this.responses = [];
         this.currentResponseIndex = -1;
@@ -460,9 +533,17 @@ export class AssistantApp extends LitElement {
                 return html`
                     <main-view
                         .onStart=${() => this.handleStart()}
+                        .onPrepare=${() => this.handlePrepareClick()}
                         .onAPIKeyHelp=${() => this.handleAPIKeyHelp()}
                         .onLayoutModeChange=${layoutMode => this.handleLayoutModeChange(layoutMode)}
                     ></main-view>
+                `;
+
+            case 'session-prep':
+                return html`
+                    <session-prep-view
+                        .onStartSession=${prepData => this.handleStartSession(prepData)}
+                    ></session-prep-view>
                 `;
 
             case 'customize':
@@ -499,7 +580,12 @@ export class AssistantApp extends LitElement {
                         .selectedProfile=${this.selectedProfile}
                         .onSendText=${message => this.handleSendText(message)}
                         .shouldAnimateResponse=${this.shouldAnimateResponse}
+                        .copilotActive=${this.copilotActive}
+                        .copilotPrep=${this.copilotPrep}
                         @response-index-changed=${this.handleResponseIndexChanged}
+                        @notes-updated=${(e) => {
+                        this.accumulatedNotes = e.detail.notes;
+                    }}
                         @response-animation-complete=${() => {
                         this.shouldAnimateResponse = false;
                         this._currentResponseIsComplete = true;
@@ -507,6 +593,17 @@ export class AssistantApp extends LitElement {
                         this.requestUpdate();
                     }}
                     ></assistant-view>
+                `;
+
+            case 'session-summary':
+                return html`
+                    <session-summary-view
+                        .accumulatedNotes=${this.accumulatedNotes}
+                        .copilotPrep=${this.copilotPrep}
+                        .responses=${this.responses}
+                        .selectedProfile=${this.selectedProfile}
+                        .onDone=${() => this.handleClose()}
+                    ></session-summary-view>
                 `;
 
             default:
@@ -521,6 +618,8 @@ export class AssistantApp extends LitElement {
             'customize': 'settings-view',
             'help': 'help-view',
             'history': 'history-view',
+            'session-prep': 'settings-view',
+            'session-summary': 'settings-view',
         };
         const mainContentClass = `main-content ${viewClassMap[this.currentView] || 'with-border'}`;
 

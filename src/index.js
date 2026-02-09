@@ -2,9 +2,12 @@ if (require('electron-squirrel-startup')) {
     process.exit(0);
 }
 
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
+const path = require('path');
 const { createWindow, updateGlobalShortcuts } = require('./utils/window');
-const { setupGeminiIpcHandlers, stopMacOSAudioCapture, sendToRenderer } = require('./utils/gemini');
+const { setupGeminiIpcHandlers, stopMacOSAudioCapture, sendToRenderer, generateSessionSummary } = require('./utils/gemini');
+const { parseDocument, getFileDialogFilters } = require('./utils/documentParser');
+const { exportNotesToDocx } = require('./utils/notesExporter');
 const storage = require('./storage');
 
 const geminiSessionRef = { current: null };
@@ -221,6 +224,36 @@ function setupStorageIpcHandlers() {
         }
     });
 
+    // ============ CO-PILOT PREP ============
+    ipcMain.handle('storage:get-copilot-prep', async () => {
+        try {
+            return { success: true, data: storage.getCoPilotPrep() };
+        } catch (error) {
+            console.error('Error getting co-pilot prep:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('storage:set-copilot-prep', async (event, data) => {
+        try {
+            storage.setCoPilotPrep(data);
+            return { success: true };
+        } catch (error) {
+            console.error('Error setting co-pilot prep:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('storage:update-copilot-prep', async (event, key, value) => {
+        try {
+            storage.updateCoPilotPrepField(key, value);
+            return { success: true };
+        } catch (error) {
+            console.error('Error updating co-pilot prep:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
     // ============ CLEAR ALL ============
     ipcMain.handle('storage:clear-all', async () => {
         try {
@@ -270,5 +303,106 @@ function setupGeneralIpcHandlers() {
     // Debug logging from renderer
     ipcMain.on('log-message', (event, msg) => {
         console.log(msg);
+    });
+
+    // ============ CO-PILOT DOCUMENT HANDLERS ============
+    ipcMain.handle('copilot:open-file-dialog', async () => {
+        try {
+            const result = await dialog.showOpenDialog(mainWindow, {
+                properties: ['openFile'],
+                filters: getFileDialogFilters(),
+            });
+
+            if (result.canceled || result.filePaths.length === 0) {
+                return { success: false, error: 'No file selected' };
+            }
+
+            const filePath = result.filePaths[0];
+            const fileName = path.basename(filePath);
+            const fs = require('fs');
+            const stats = fs.statSync(filePath);
+
+            const parsed = await parseDocument(filePath);
+            if (!parsed.success) {
+                return { success: false, error: parsed.error };
+            }
+
+            return {
+                success: true,
+                data: {
+                    name: fileName,
+                    path: filePath,
+                    extractedText: parsed.text,
+                    size: stats.size,
+                    mimeType: path.extname(filePath).toLowerCase(),
+                }
+            };
+        } catch (error) {
+            console.error('Error opening file dialog:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('copilot:parse-document', async (event, filePath) => {
+        try {
+            const parsed = await parseDocument(filePath);
+            if (!parsed.success) {
+                return { success: false, error: parsed.error };
+            }
+
+            const fileName = path.basename(filePath);
+            const fs = require('fs');
+            const stats = fs.statSync(filePath);
+
+            return {
+                success: true,
+                data: {
+                    name: fileName,
+                    path: filePath,
+                    extractedText: parsed.text,
+                    size: stats.size,
+                    mimeType: path.extname(filePath).toLowerCase(),
+                }
+            };
+        } catch (error) {
+            console.error('Error parsing document:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('copilot:generate-summary', async (event, { prepData, notes, responses, profile }) => {
+        try {
+            const result = await generateSessionSummary({ prepData, notes, responses, profile });
+            return result;
+        } catch (error) {
+            console.error('Error generating summary:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('copilot:export-notes', async (event, { summary, prepData, notes, profile }) => {
+        try {
+            const buffer = await exportNotesToDocx({ summary, prepData, notes, profile });
+            if (!buffer || buffer.length === 0) {
+                return { success: false, error: 'Failed to generate document' };
+            }
+
+            const result = await dialog.showSaveDialog(mainWindow, {
+                title: 'Save Session Notes',
+                defaultPath: `session-notes-${new Date().toISOString().slice(0, 10)}.docx`,
+                filters: [{ name: 'Word Document', extensions: ['docx'] }],
+            });
+
+            if (result.canceled || !result.filePath) {
+                return { success: false, error: 'Save cancelled' };
+            }
+
+            const fs = require('fs').promises;
+            await fs.writeFile(result.filePath, buffer);
+            return { success: true, data: { filePath: result.filePath } };
+        } catch (error) {
+            console.error('Error exporting notes:', error);
+            return { success: false, error: error.message };
+        }
     });
 }

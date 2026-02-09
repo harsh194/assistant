@@ -1,0 +1,477 @@
+import { html, css, LitElement } from '../../assets/lit-core-2.7.4.min.js';
+import { resizeLayout } from '../../utils/windowResize.js';
+
+export class SessionPrepView extends LitElement {
+    static styles = css`
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            cursor: default;
+            user-select: none;
+        }
+
+        :host {
+            display: block;
+            height: 100%;
+            overflow-y: auto;
+        }
+
+        :host::-webkit-scrollbar { width: 8px; }
+        :host::-webkit-scrollbar-track { background: transparent; }
+        :host::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+
+        .content-header {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 16px;
+            padding: 0 16px 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .form-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            padding: 12px 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .form-label {
+            font-weight: 500;
+            font-size: 12px;
+            color: var(--text-color);
+        }
+
+        .form-description {
+            font-size: 11px;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .form-control {
+            background: var(--input-background);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            transition: border-color 0.1s ease;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--border-default);
+        }
+
+        textarea.form-control {
+            resize: vertical;
+            min-height: 50px;
+            line-height: 1.4;
+            font-family: inherit;
+        }
+
+        textarea.form-control::placeholder {
+            color: var(--placeholder-color);
+        }
+
+        .form-control::placeholder {
+            color: var(--placeholder-color);
+        }
+
+        .topics-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+        .topic-chip {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            padding: 4px 8px;
+            font-size: 11px;
+            color: var(--text-color);
+        }
+
+        .topic-chip button {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            padding: 0;
+            font-size: 14px;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .topic-chip button:hover {
+            color: var(--error-color);
+        }
+
+        .topic-input-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        .topic-input-row input {
+            flex: 1;
+        }
+
+        .add-button {
+            background: var(--bg-tertiary);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 500;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .add-button:hover {
+            background: var(--hover-background);
+        }
+
+        .docs-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 4px;
+        }
+
+        .doc-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            padding: 6px 10px;
+            font-size: 11px;
+        }
+
+        .doc-item .doc-info {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--text-color);
+            overflow: hidden;
+        }
+
+        .doc-item .doc-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .doc-item .doc-size {
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .doc-item button {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            padding: 0 2px;
+            font-size: 14px;
+            line-height: 1;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .doc-item button:hover {
+            color: var(--error-color);
+        }
+
+        .upload-button {
+            background: transparent;
+            color: var(--text-color);
+            border: 1px dashed var(--border-color);
+            padding: 10px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.1s ease;
+        }
+
+        .upload-button:hover {
+            background: var(--hover-background);
+            border-color: var(--border-default);
+        }
+
+        .upload-button.loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .start-button {
+            background: var(--start-button-background);
+            color: var(--start-button-color);
+            border: none;
+            padding: 10px 16px;
+            border-radius: 3px;
+            font-size: 13px;
+            font-weight: 500;
+            width: 100%;
+            cursor: pointer;
+            transition: background 0.1s ease;
+            margin-top: 4px;
+        }
+
+        .start-button:hover {
+            background: var(--start-button-hover-background);
+        }
+
+        .shortcut-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+
+        .section-divider {
+            border: none;
+            border-top: 1px solid var(--border-color);
+            margin: 4px 0;
+        }
+    `;
+
+    static properties = {
+        onStartSession: { type: Function },
+        prepData: { type: Object },
+        _topicInput: { state: true },
+        _isUploading: { state: true },
+    };
+
+    constructor() {
+        super();
+        this.onStartSession = () => {};
+        this.prepData = {
+            goal: '',
+            desiredOutcome: '',
+            successCriteria: '',
+            decisionOwner: '',
+            keyTopics: [],
+            referenceDocuments: [],
+            customNotes: '',
+        };
+        this._topicInput = '';
+        this._isUploading = false;
+        this._loadFromStorage();
+    }
+
+    async _loadFromStorage() {
+        try {
+            const data = await assistant.storage.getCoPilotPrep();
+            this.prepData = { ...this.prepData, ...data };
+            this.requestUpdate();
+        } catch (error) {
+            console.error('Error loading co-pilot prep:', error);
+        }
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        resizeLayout();
+    }
+
+    async _saveField(key, value) {
+        this.prepData = { ...this.prepData, [key]: value };
+        await assistant.storage.updateCoPilotPrep(key, value);
+    }
+
+    handleInput(key, e) {
+        this._saveField(key, e.target.value);
+    }
+
+    handleTopicInputKeydown(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            this._addTopic();
+        }
+    }
+
+    _addTopic() {
+        const text = this._topicInput.trim();
+        if (!text) return;
+
+        const newTopics = [...this.prepData.keyTopics, { text, covered: false }];
+        this._saveField('keyTopics', newTopics);
+        this._topicInput = '';
+        this.requestUpdate();
+    }
+
+    _removeTopic(index) {
+        const newTopics = this.prepData.keyTopics.filter((_, i) => i !== index);
+        this._saveField('keyTopics', newTopics);
+    }
+
+    async _handleUploadClick() {
+        if (this._isUploading) return;
+        this._isUploading = true;
+        this.requestUpdate();
+
+        try {
+            const result = await assistant.openFileDialog();
+            if (result.success) {
+                const newDocs = [...this.prepData.referenceDocuments, result.data];
+                await this._saveField('referenceDocuments', newDocs);
+            }
+        } catch (error) {
+            console.error('Error uploading document:', error);
+        } finally {
+            this._isUploading = false;
+            this.requestUpdate();
+        }
+    }
+
+    _removeDocument(index) {
+        const newDocs = this.prepData.referenceDocuments.filter((_, i) => i !== index);
+        this._saveField('referenceDocuments', newDocs);
+    }
+
+    _formatFileSize(bytes) {
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    _handleStartSession() {
+        this.onStartSession(this.prepData);
+    }
+
+    render() {
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const shortcut = isMac ? 'Cmd+Enter' : 'Ctrl+Enter';
+
+        return html`
+            <div class="content-header">Session Preparation</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">Goal</label>
+                    <input
+                        type="text"
+                        class="form-control"
+                        placeholder="What do you want to achieve?"
+                        .value=${this.prepData.goal}
+                        @input=${e => this.handleInput('goal', e)}
+                    />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Desired Outcome</label>
+                    <input
+                        type="text"
+                        class="form-control"
+                        placeholder="What specific result are you looking for?"
+                        .value=${this.prepData.desiredOutcome}
+                        @input=${e => this.handleInput('desiredOutcome', e)}
+                    />
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Success Criteria</label>
+                    <textarea
+                        class="form-control"
+                        placeholder="How will you measure success?"
+                        .value=${this.prepData.successCriteria}
+                        @input=${e => this.handleInput('successCriteria', e)}
+                    ></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Decision Owner</label>
+                    <input
+                        type="text"
+                        class="form-control"
+                        placeholder="Who has authority to decide?"
+                        .value=${this.prepData.decisionOwner}
+                        @input=${e => this.handleInput('decisionOwner', e)}
+                    />
+                </div>
+
+                <hr class="section-divider" />
+
+                <div class="form-group">
+                    <label class="form-label">Key Topics</label>
+                    <div class="topic-input-row">
+                        <input
+                            type="text"
+                            class="form-control"
+                            placeholder="Add a topic..."
+                            .value=${this._topicInput}
+                            @input=${e => { this._topicInput = e.target.value; }}
+                            @keydown=${this.handleTopicInputKeydown}
+                        />
+                        <button class="add-button" @click=${() => this._addTopic()}>Add</button>
+                    </div>
+                    ${this.prepData.keyTopics.length > 0 ? html`
+                        <div class="topics-container">
+                            ${this.prepData.keyTopics.map((topic, i) => html`
+                                <span class="topic-chip">
+                                    ${topic.text}
+                                    <button @click=${() => this._removeTopic(i)}>x</button>
+                                </span>
+                            `)}
+                        </div>
+                    ` : ''}
+                </div>
+
+                <hr class="section-divider" />
+
+                <div class="form-group">
+                    <label class="form-label">Reference Documents</label>
+                    <div class="form-description">Upload agendas, briefs, proposals, resumes, contracts, or notes</div>
+                    ${this.prepData.referenceDocuments.length > 0 ? html`
+                        <div class="docs-list">
+                            ${this.prepData.referenceDocuments.map((doc, i) => html`
+                                <div class="doc-item">
+                                    <div class="doc-info">
+                                        <span class="doc-name">${doc.name}</span>
+                                        <span class="doc-size">${this._formatFileSize(doc.size)}</span>
+                                    </div>
+                                    <button @click=${() => this._removeDocument(i)}>x</button>
+                                </div>
+                            `)}
+                        </div>
+                    ` : ''}
+                    <button
+                        class="upload-button ${this._isUploading ? 'loading' : ''}"
+                        @click=${() => this._handleUploadClick()}
+                    >
+                        ${this._isUploading ? 'Processing...' : '+ Upload Document'}
+                    </button>
+                </div>
+
+                <hr class="section-divider" />
+
+                <div class="form-group">
+                    <label class="form-label">Additional Notes</label>
+                    <textarea
+                        class="form-control"
+                        placeholder="Any additional context, constraints, or instructions..."
+                        .value=${this.prepData.customNotes}
+                        @input=${e => this.handleInput('customNotes', e)}
+                        style="min-height: 60px;"
+                    ></textarea>
+                </div>
+
+                <button class="start-button" @click=${() => this._handleStartSession()}>
+                    Start Session <span class="shortcut-hint">${shortcut}</span>
+                </button>
+            </div>
+        `;
+    }
+}
+
+customElements.define('session-prep-view', SessionPrepView);

@@ -205,7 +205,9 @@ Provide direct exam answers in **markdown format**. Include the question text, t
     },
 };
 
-function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled = true) {
+const { buildCoPilotContext, buildCoPilotInstructions } = require('./copilotPrompts');
+
+function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled = true, copilotPrep = null) {
     const sections = [promptParts.intro, '\n\n', promptParts.formatRequirements];
 
     // Only add search usage section if Google Search is enabled
@@ -213,14 +215,23 @@ function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled =
         sections.push('\n\n', promptParts.searchUsage);
     }
 
-    sections.push('\n\n', promptParts.content, '\n\nUser-provided context\n-----\n', customPrompt, '\n-----\n\n', promptParts.outputInstructions);
+    sections.push('\n\n', promptParts.content);
+
+    // Add co-pilot context and instructions if prep data is provided
+    if (copilotPrep) {
+        const copilotContext = buildCoPilotContext(copilotPrep);
+        const copilotInstructions = buildCoPilotInstructions(copilotPrep.profile || 'interview');
+        sections.push('\n\n', copilotContext, '\n\n', copilotInstructions);
+    }
+
+    sections.push('\n\nUser-provided context\n-----\n', customPrompt, '\n-----\n\n', promptParts.outputInstructions);
 
     return sections.join('');
 }
 
-function getSystemPrompt(profile, customPrompt = '', googleSearchEnabled = true) {
+function getSystemPrompt(profile, customPrompt = '', googleSearchEnabled = true, copilotPrep = null) {
     const promptParts = profilePrompts[profile] || profilePrompts.interview;
-    return buildSystemPrompt(promptParts, customPrompt, googleSearchEnabled);
+    return buildSystemPrompt(promptParts, customPrompt, googleSearchEnabled, copilotPrep);
 }
 
 module.exports = {

@@ -1,86 +1,126 @@
-![AI Assistant Banner](assets/assistant.png)
+# Assistant
 
-# AI Assistant
+AI-powered desktop assistant for real-time conversations. Built with Electron and Google Gemini API.
 
-A powerful, real-time AI assistant designed to provide contextual help during video calls, interviews, presentations, and meetings. By leveraging screen capture and audio analysis, it understands your current context and offers relevant support instantly.
+## Features
 
-## 🌟 Features
+- **Real-Time AI Responses** - Live audio capture and transcription with AI-generated suggestions
+- **Multiple Profiles** - Interview, Sales, Meeting, Presentation, Negotiation, Exam
+- **Co-Pilot Mode** - Structured, goal-driven session assistant with:
+  - Pre-session setup (goal, desired outcome, key topics, reference documents)
+  - Document ingestion via Gemini API OCR (PDF, DOCX, images, text)
+  - Silent notes accumulation during sessions
+  - Post-session summary generation
+  - Export notes and summary as .docx
+- **Screen Analysis** - Capture and analyze screen content with AI
+- **Session History** - Browse past sessions with conversation, screen analysis, and co-pilot notes
+- **Customizable** - Themes, keybinds, layout modes, transparency
+- **Cross-Platform** - Windows, macOS, Linux
 
--   **Live AI Assistance**: Powered by the cutting-edge **Google Gemini** model for rapid, accurate responses.
--   **Contextual Awareness**: Analyzes both **screen content** and **system/microphone audio** to understand what is happening in real-time.
--   **Specialized Profiles**: Tailored modes for various scenarios:
-    -   Interview
-    -   Sales Call
-    -   Business Meeting
-    -   Presentation
-    -   Negotiation
-    -   Exam Assistant
-
--   **Unobtrusive Overlay**: An always-on-top window that integrates seamlessly into your workflow.
--   **Interactive & Passive Modes**: Toggle "Click-through Mode" to interact with windows behind the assistant.
--   **Cross-Platform Core**: Built on Electron for macOS and Windows.
-
-## 🛠️ Tech Stack
-
--   **Runtime**: Electron
--   **AI Model**: Google Gemini 
--   **Language**: JavaScript/Node.js
-
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
--   **Node.js** (Latest LTS recommended)
--   **npm** (comes with Node.js)
--   A **Google Gemini API Key** (Get it from [Google AI Studio](https://aistudio.google.com/apikey))
--   **FFmpeg** (Ensure it is installed and in your system PATH, mostly for Linux/macOS audio handling if needed)
+- [Node.js](https://nodejs.org/) (v18 or later)
+- A [Google Gemini API key](https://aistudio.google.com/apikey)
 
 ### Installation
 
-1.  **Clone the repository**
-    ```bash
-    git clone https://github.com/harsh194/assistant.git
-    cd assistant
-    ```
+```bash
+git clone <repository-url>
+cd assistant
+npm install
+```
 
-2.  **Install dependencies**
-    ```bash
-    npm install
-    ```
+### Development
 
-3.  **Run the application**
-    ```bash
-    npm start
-    ```
+```bash
+npm start
+```
 
-## 📖 Usage
+### Build
 
-1.  **Launch the App**: Run `npm start`.
-2.  **Configure API Key**: Enter your Google Gemini API Key in the main window input field.
-3.  **Select Profile**: Go to settings and choose the profile that matches your current activity (e.g., *Interview*).
-4.  **Start Session**: Click **"Start Session"**.
-5.  **Position Overlay**: Use the keyboard shortcuts to move the assistant window to a convenient spot on your screen.
-6.  **Receive Help**: The AI will listen and watch your screen, providing real-time text assistance based on the conversation and visual context.
+```bash
+# Package for current platform
+npm run package
 
-## ⌨️ Keyboard Shortcuts
+# Create distributable
+npm run make
+```
 
-| Action | Shortcut | Description |
-| :--- | :--- | :--- |
-| **Move Window** | `Ctrl`/`Cmd` + `Arrow Keys` | Move the overlay window around the screen. |
-| **Toggle Click-through** | `Ctrl`/`Cmd` + `M` | Toggle mouse events (pass clicks through the window). |
-| **Close / Back** | `Ctrl`/`Cmd` + `\` | Close the window or navigate back. |
-| **Send Message** | `Enter` | Send typed text to the AI manually. |
+## How It Works
 
+### Quick Start
 
+1. Enter your Gemini API key
+2. Click **Start** to begin a live session
+3. The AI listens to your conversation and provides real-time suggestions
 
-## 📄 License
+### Co-Pilot Mode
 
-This project is licensed under the **MIT License**.
+1. Click **Prepare Session** from the main screen
+2. Fill in session details:
+   - **Goal** - What you want to achieve
+   - **Desired Outcome** - Expected result
+   - **Success Criteria** - How to measure success
+   - **Key Topics** - Topics to cover during the session
+   - **Reference Documents** - Upload PDFs, images, Word docs, or text files
+   - **Custom Notes** - Additional context
+3. Click **Start Session** to begin
+4. During the session, the AI silently accumulates structured notes (key points, decisions, action items, open questions)
+5. When you close the session, a **Session Summary** view appears with:
+   - AI-generated summary
+   - **View Notes** - See all accumulated notes
+   - **Save as Document** - Export everything as a .docx file
 
-## 👤 Author
+## Tech Stack
 
-**Harsh Ranjan**
--   Email: harshranjan194@gmail.com
+| Technology | Purpose |
+|-----------|---------|
+| Electron 30.x | Desktop runtime |
+| Google Gemini API | AI (live audio + HTTP API) |
+| Lit 2.7.4 | Web components (no build step) |
+| Marked.js | Markdown rendering |
+| docx | .docx document generation |
+| JSON files | Persistent storage |
 
----
+## Project Structure
 
+```
+src/
+├── index.js                  # Main process (IPC handlers, window management)
+├── storage.js                # JSON persistence layer
+├── components/
+│   ├── app/
+│   │   ├── AssistantApp.js   # Root component (state, routing)
+│   │   └── AppHeader.js      # Header with navigation
+│   └── views/
+│       ├── MainView.js           # Start + Prepare buttons
+│       ├── AssistantView.js      # Live AI response display
+│       ├── SessionPrepView.js    # Co-Pilot setup form
+│       ├── SessionSummaryView.js # Post-session summary + export
+│       ├── HistoryView.js        # Session history browser
+│       ├── CustomizeView.js      # Settings
+│       └── HelpView.js          # Help & shortcuts
+└── utils/
+    ├── gemini.js             # Gemini API (live session + HTTP)
+    ├── prompts.js            # Profile-based prompt templates
+    ├── copilotPrompts.js     # Co-Pilot behavioral instructions
+    ├── notesParser.js        # Parse structured markers from AI
+    ├── notesExporter.js      # Export notes to .docx
+    ├── documentParser.js     # Document text extraction (OCR)
+    └── renderer.js           # Renderer process utilities
+```
+
+## Supported Document Types
+
+For Co-Pilot reference document upload:
+
+| Type | Extension | Method |
+|------|-----------|--------|
+| Plain text | .txt, .md | Direct read |
+| PDF | .pdf | Gemini API OCR |
+| Word | .docx, .doc | Gemini API OCR |
+| Images | .png, .jpg, .jpeg | Gemini API OCR |
+
+Max file size: 10MB

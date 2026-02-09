@@ -249,6 +249,8 @@ export class AppHeader extends LitElement {
             history: 'Conversation History',
             advanced: 'Advanced Tools',
             assistant: 'Assistant',
+            'session-prep': 'Session Prep',
+            'session-summary': 'Session Summary',
         };
         return titles[this.currentView] || 'Assistant';
     }
@@ -267,7 +269,7 @@ export class AppHeader extends LitElement {
     }
 
     isNavigationView() {
-        const navigationViews = ['customize', 'help', 'history', 'advanced'];
+        const navigationViews = ['customize', 'help', 'history', 'advanced', 'session-prep', 'session-summary'];
         return navigationViews.includes(this.currentView);
     }
 

@@ -10,3 +10,5 @@ export { HistoryView } from './views/HistoryView.js';
 export { AssistantView } from './views/AssistantView.js';
 export { OnboardingView } from './views/OnboardingView.js';
 export { AdvancedView } from './views/AdvancedView.js';
+export { SessionPrepView } from './views/SessionPrepView.js';
+export { SessionSummaryView } from './views/SessionSummaryView.js';

@@ -30,6 +30,16 @@ const DEFAULT_PREFERENCES = {
     windowHeight: 600
 };
 
+const DEFAULT_COPILOT_PREP = {
+    goal: '',
+    desiredOutcome: '',
+    successCriteria: '',
+    decisionOwner: '',
+    keyTopics: [],
+    referenceDocuments: [],
+    customNotes: ''
+};
+
 const DEFAULT_KEYBINDS = null; // null means use system defaults
 
 const DEFAULT_LIMITS = {
@@ -75,6 +85,10 @@ function getLimitsPath() {
 
 function getHistoryDir() {
     return path.join(getConfigDir(), 'history');
+}
+
+function getCoPilotPrepPath() {
+    return path.join(getConfigDir(), 'copilot-prep.json');
 }
 
 // Helper to read JSON file safely
@@ -329,7 +343,11 @@ function saveSession(sessionId, data) {
         customPrompt: data.customPrompt || existingSession?.customPrompt || null,
         // Conversation data
         conversationHistory: data.conversationHistory || existingSession?.conversationHistory || [],
-        screenAnalysisHistory: data.screenAnalysisHistory || existingSession?.screenAnalysisHistory || []
+        screenAnalysisHistory: data.screenAnalysisHistory || existingSession?.screenAnalysisHistory || [],
+        // Co-pilot data
+        copilotPrep: data.copilotPrep || existingSession?.copilotPrep || null,
+        sessionNotes: data.sessionNotes || existingSession?.sessionNotes || null,
+        summary: data.summary || existingSession?.summary || null
     };
     return writeJsonFile(sessionPath, sessionData);
 }
@@ -366,7 +384,9 @@ function getAllSessions() {
                     messageCount: data.conversationHistory?.length || 0,
                     screenAnalysisCount: data.screenAnalysisHistory?.length || 0,
                     profile: data.profile || null,
-                    customPrompt: data.customPrompt || null
+                    customPrompt: data.customPrompt || null,
+                    hasCopilot: !!data.copilotPrep,
+                    hasSummary: !!data.summary
                 };
             }
             return null;
@@ -404,6 +424,25 @@ function deleteAllSessions() {
         console.error('Error deleting all sessions:', error.message);
         return false;
     }
+}
+
+// ============ CO-PILOT PREP ============
+
+function getCoPilotPrep() {
+    const saved = readJsonFile(getCoPilotPrepPath(), {});
+    return { ...DEFAULT_COPILOT_PREP, ...saved };
+}
+
+function setCoPilotPrep(data) {
+    const current = getCoPilotPrep();
+    const updated = { ...current, ...data };
+    return writeJsonFile(getCoPilotPrepPath(), updated);
+}
+
+function updateCoPilotPrepField(key, value) {
+    const prep = getCoPilotPrep();
+    prep[key] = value;
+    return writeJsonFile(getCoPilotPrepPath(), prep);
 }
 
 // ============ CLEAR ALL DATA ============
@@ -451,6 +490,11 @@ module.exports = {
     getAllSessions,
     deleteSession,
     deleteAllSessions,
+
+    // Co-Pilot Prep
+    getCoPilotPrep,
+    setCoPilotPrep,
+    updateCoPilotPrepField,
 
     // Clear all
     clearAllData

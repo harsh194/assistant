@@ -428,6 +428,9 @@ export class HistoryView extends LitElement {
 
     getSessionPreview(session) {
         const parts = [];
+        if (session.hasCopilot) {
+            parts.push('Co-Pilot');
+        }
         if (session.messageCount > 0) {
             parts.push(`${session.messageCount} messages`);
         }
@@ -565,13 +568,69 @@ export class HistoryView extends LitElement {
         `);
     }
 
+    renderNotesContent() {
+        const { sessionNotes, summary, copilotPrep } = this.selectedSession;
+        const hasNotes = sessionNotes && (
+            sessionNotes.keyPoints?.length > 0 ||
+            sessionNotes.decisions?.length > 0 ||
+            sessionNotes.actionItems?.length > 0 ||
+            sessionNotes.openQuestions?.length > 0 ||
+            sessionNotes.nextSteps?.length > 0
+        );
+
+        if (!hasNotes && !summary) {
+            return html`<div class="empty-state">No notes or summary available for this session</div>`;
+        }
+
+        const renderList = (items, label) => {
+            if (!items || items.length === 0) return '';
+            return html`
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 12px; font-weight: 500; color: var(--text-color); margin-bottom: 4px;">${label}</div>
+                    ${items.map(item => html`<div class="message screen">${item}</div>`)}
+                </div>
+            `;
+        };
+
+        return html`
+            ${copilotPrep?.goal ? html`
+                <div class="session-context">
+                    <div class="session-context-row">
+                        <span class="context-label">Goal:</span>
+                        <span class="context-value">${copilotPrep.goal}</span>
+                    </div>
+                    ${copilotPrep.desiredOutcome ? html`
+                        <div class="session-context-row">
+                            <span class="context-label">Outcome:</span>
+                            <span class="context-value">${copilotPrep.desiredOutcome}</span>
+                        </div>
+                    ` : ''}
+                </div>
+            ` : ''}
+            ${summary ? html`
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 12px; font-weight: 500; color: var(--text-color); margin-bottom: 4px;">Summary</div>
+                    <div class="message ai" style="white-space: pre-wrap;">${summary}</div>
+                </div>
+            ` : ''}
+            ${hasNotes ? html`
+                ${renderList(sessionNotes.keyPoints, 'Key Points')}
+                ${renderList(sessionNotes.decisions, 'Decisions')}
+                ${renderList(sessionNotes.actionItems, 'Action Items')}
+                ${renderList(sessionNotes.openQuestions, 'Open Questions')}
+                ${renderList(sessionNotes.nextSteps, 'Next Steps')}
+            ` : ''}
+        `;
+    }
+
     renderConversationView() {
         if (!this.selectedSession) return html``;
 
-        const { conversationHistory, screenAnalysisHistory, profile, customPrompt } = this.selectedSession;
+        const { conversationHistory, screenAnalysisHistory, profile, customPrompt, copilotPrep, sessionNotes, summary } = this.selectedSession;
         const hasConversation = conversationHistory && conversationHistory.length > 0;
         const hasScreenAnalysis = screenAnalysisHistory && screenAnalysisHistory.length > 0;
         const hasContext = profile || customPrompt;
+        const hasCopilotData = copilotPrep || sessionNotes || summary;
 
         return html`
             <div class="back-header">
@@ -617,6 +676,14 @@ export class HistoryView extends LitElement {
                 >
                     Screen ${hasScreenAnalysis ? `(${screenAnalysisHistory.length})` : ''}
                 </button>
+                ${hasCopilotData ? html`
+                    <button
+                        class="view-tab ${this.activeTab === 'notes' ? 'active' : ''}"
+                        @click=${() => this.handleTabClick('notes')}
+                    >
+                        Notes
+                    </button>
+                ` : ''}
                 <button
                     class="view-tab ${this.activeTab === 'context' ? 'active' : ''}"
                     @click=${() => this.handleTabClick('context')}
@@ -629,7 +696,9 @@ export class HistoryView extends LitElement {
                 ? this.renderConversationContent()
                 : this.activeTab === 'screen'
                     ? this.renderScreenAnalysisContent()
-                    : this.renderContextContent()}
+                    : this.activeTab === 'notes'
+                        ? this.renderNotesContent()
+                        : this.renderContextContent()}
             </div>
         `;
     }

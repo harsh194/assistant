@@ -1,5 +1,6 @@
 import { html, css, LitElement } from '../../assets/lit-core-2.7.4.min.js';
 import { RequestState, isRequestInProgress } from '../../utils/requestState.js';
+import { parseResponse, mergeNotes } from '../../utils/notesParser.js';
 import '../ui/RequestStatus.js';
 
 export class AssistantView extends LitElement {
@@ -347,6 +348,8 @@ export class AssistantView extends LitElement {
         requestState: { type: String },
         requestStartTime: { type: Number },
         elapsedTime: { type: Number },
+        copilotActive: { type: Boolean },
+        copilotPrep: { type: Object },
     };
 
     constructor() {
@@ -361,6 +364,19 @@ export class AssistantView extends LitElement {
         this.requestStartTime = null;
         this.elapsedTime = 0;
         this._elapsedTimer = null;
+        this.copilotActive = false;
+        this.copilotPrep = null;
+        this._sessionNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
+        this._lastParsedResponse = '';
+    }
+
+    getSessionNotes() {
+        return this._sessionNotes;
+    }
+
+    resetSessionNotes() {
+        this._sessionNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
+        this._lastParsedResponse = '';
     }
 
     getProfileNames() {
@@ -731,7 +747,27 @@ export class AssistantView extends LitElement {
         if (container) {
             const currentResponse = this.getCurrentResponse();
             console.log('Current response:', currentResponse);
-            const renderedResponse = this.renderMarkdown(currentResponse);
+
+            let displayText = currentResponse;
+
+            // When co-pilot is active, parse out notes/markers silently
+            if (this.copilotActive && currentResponse) {
+                const parsed = parseResponse(currentResponse);
+                displayText = parsed.cleanText;
+
+                // Only accumulate notes if this is a new/changed response (prevent duplicates)
+                if (parsed.notes && currentResponse !== this._lastParsedResponse) {
+                    this._lastParsedResponse = currentResponse;
+                    this._sessionNotes = mergeNotes(this._sessionNotes, parsed.notes);
+                    this.dispatchEvent(new CustomEvent('notes-updated', {
+                        detail: { notes: this._sessionNotes },
+                        bubbles: true,
+                        composed: true,
+                    }));
+                }
+            }
+
+            const renderedResponse = this.renderMarkdown(displayText);
             console.log('Rendered response:', renderedResponse);
             container.innerHTML = renderedResponse;
             // Show all words immediately (no animation)

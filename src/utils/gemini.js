@@ -183,7 +183,7 @@ async function getStoredSetting(key, defaultValue) {
     return defaultValue;
 }
 
-async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'interview', language = 'en-US', isReconnect = false) {
+async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'interview', language = 'en-US', isReconnect = false, copilotPrep = null) {
     if (isInitializingSession) {
         console.log('Session initialization already in progress');
         return false;
@@ -196,7 +196,7 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
 
     // Store params for reconnection
     if (!isReconnect) {
-        sessionParams = { apiKey, customPrompt, profile, language };
+        sessionParams = { apiKey, customPrompt, profile, language, copilotPrep };
         reconnectAttempts = 0;
     }
 
@@ -210,7 +210,7 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
     const enabledTools = await getEnabledTools();
     const googleSearchEnabled = enabledTools.some(tool => tool.googleSearch);
 
-    const systemPrompt = getSystemPrompt(profile, customPrompt, googleSearchEnabled);
+    const systemPrompt = getSystemPrompt(profile, customPrompt, googleSearchEnabled, copilotPrep);
 
     // Initialize new conversation session only on first connect
     if (!isReconnect) {
@@ -342,7 +342,8 @@ async function attemptReconnect() {
             sessionParams.customPrompt,
             sessionParams.profile,
             sessionParams.language,
-            true // isReconnect
+            true, // isReconnect
+            sessionParams.copilotPrep
         );
 
         if (session && global.geminiSessionRef) {
@@ -597,8 +598,8 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     // Store the geminiSessionRef globally for reconnection access
     global.geminiSessionRef = geminiSessionRef;
 
-    ipcMain.handle('initialize-gemini', async (event, apiKey, customPrompt, profile = 'interview', language = 'en-US') => {
-        const session = await initializeGeminiSession(apiKey, customPrompt, profile, language);
+    ipcMain.handle('initialize-gemini', async (event, apiKey, customPrompt, profile = 'interview', language = 'en-US', copilotPrep = null) => {
+        const session = await initializeGeminiSession(apiKey, customPrompt, profile, language, false, copilotPrep);
         if (session) {
             geminiSessionRef.current = session;
             return true;
@@ -776,6 +777,75 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     });
 }
 
+/**
+ * Generate a structured session summary using Gemini HTTP API.
+ * @param {Object} options
+ * @param {Object} options.prepData - Co-pilot prep data
+ * @param {Object} options.notes - Accumulated session notes
+ * @param {Array} options.responses - Array of AI response strings from the session
+ * @param {string} options.profile - Session profile
+ * @returns {Promise<{success: boolean, summary?: string, error?: string}>}
+ */
+async function generateSessionSummary({ prepData, notes, responses, profile }) {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+        return { success: false, error: 'No API key configured' };
+    }
+
+    try {
+        const ai = new GoogleGenAI({ apiKey });
+
+        const contextParts = [];
+        if (prepData?.goal) contextParts.push(`Goal: ${prepData.goal}`);
+        if (prepData?.desiredOutcome) contextParts.push(`Desired Outcome: ${prepData.desiredOutcome}`);
+        if (prepData?.successCriteria) contextParts.push(`Success Criteria: ${prepData.successCriteria}`);
+
+        if (prepData?.keyTopics?.length > 0) {
+            contextParts.push('Key Topics: ' + prepData.keyTopics.map(t => t.text).join(', '));
+        }
+
+        const notesSummary = [];
+        if (notes?.keyPoints?.length > 0) notesSummary.push('Key Points:\n' + notes.keyPoints.map(p => `- ${p}`).join('\n'));
+        if (notes?.decisions?.length > 0) notesSummary.push('Decisions:\n' + notes.decisions.map(d => `- ${d}`).join('\n'));
+        if (notes?.actionItems?.length > 0) notesSummary.push('Action Items:\n' + notes.actionItems.map(a => `- ${a}`).join('\n'));
+        if (notes?.openQuestions?.length > 0) notesSummary.push('Open Questions:\n' + notes.openQuestions.map(q => `- ${q}`).join('\n'));
+        if (notes?.nextSteps?.length > 0) notesSummary.push('Next Steps:\n' + notes.nextSteps.map(s => `- ${s}`).join('\n'));
+
+        const recentResponses = (responses || []).slice(-10).join('\n---\n');
+
+        const prompt = `You are a session summary assistant. Based on the following session data, generate a concise, well-structured summary.
+
+SESSION CONTEXT:
+${contextParts.join('\n')}
+
+ACCUMULATED NOTES:
+${notesSummary.join('\n\n') || 'No structured notes captured.'}
+
+RECENT AI RESPONSES (last 10):
+${recentResponses || 'No responses available.'}
+
+Generate a summary with these sections:
+1. Overview (2-3 sentences about what was discussed)
+2. Goal Achievement (how well the session goal was met)
+3. Key Outcomes (main results and decisions)
+4. Unresolved Items (anything left open)
+5. Recommended Next Steps
+
+Keep it concise and actionable. Use plain text, no markdown.`;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ text: prompt }],
+        });
+
+        const summary = response.text || '';
+        return { success: true, summary };
+    } catch (error) {
+        console.error('Error generating session summary:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 module.exports = {
     initializeGeminiSession,
     getEnabledTools,
@@ -792,4 +862,5 @@ module.exports = {
     sendImageToGeminiHttp,
     setupGeminiIpcHandlers,
     formatSpeakerResults,
+    generateSessionSummary,
 };

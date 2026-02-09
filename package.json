@@ -10,7 +10,7 @@
         "make": "electron-forge make",
         "publish": "electron-forge publish",
         "lint": "echo \"No linting configured\"",
-        "postinstall": "chmod +x src/assets/SystemAudioDump && xattr -d com.apple.quarantine src/assets/SystemAudioDump || true"
+        "postinstall": "node -e \"try{if(process.platform==='darwin'){require('child_process').execSync('chmod +x src/assets/SystemAudioDump && xattr -d com.apple.quarantine src/assets/SystemAudioDump',{stdio:'ignore'})}}catch(e){}\""
     },
     "keywords": [
         "assistant",
@@ -24,6 +24,7 @@
     "license": "GPL-3.0",
     "dependencies": {
         "@google/genai": "^1.2.0",
+        "docx": "^9.5.1",
         "electron-squirrel-startup": "^1.0.1"
     },
     "devDependencies": {
