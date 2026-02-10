@@ -380,6 +380,8 @@ function setupGeneralIpcHandlers() {
             // Also save to storage
             storage.setKeybinds(newKeybinds);
             updateGlobalShortcuts(newKeybinds, mainWindow, sendToRenderer, geminiSessionRef);
+            // Notify renderer components that keybinds have been updated
+            mainWindow.webContents.send('keybinds-updated', newKeybinds);
         }
     });
 

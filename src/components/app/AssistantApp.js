@@ -96,6 +96,7 @@ export class AssistantApp extends LitElement {
 
     static properties = {
         currentView: { type: String },
+        previousView: { type: String, state: true },
         statusText: { type: String },
         startTime: { type: Number },
         isRecording: { type: Boolean },
@@ -123,6 +124,7 @@ export class AssistantApp extends LitElement {
         super();
         // Set defaults - will be overwritten by storage
         this.currentView = 'main'; // Will check onboarding after storage loads
+        this.previousView = 'main';
         this.statusText = '';
         this.startTime = null;
         this.isRecording = false;
@@ -297,16 +299,19 @@ export class AssistantApp extends LitElement {
 
     // Header event handlers
     handleCustomizeClick() {
+        this.previousView = this.currentView;
         this.currentView = 'customize';
         this.requestUpdate();
     }
 
     handleHelpClick() {
+        this.previousView = this.currentView;
         this.currentView = 'help';
         this.requestUpdate();
     }
 
     handleHistoryClick() {
+        this.previousView = this.currentView;
         this.currentView = 'history';
         this.requestUpdate();
     }
@@ -400,6 +405,7 @@ export class AssistantApp extends LitElement {
     }
 
     handlePrepareClick() {
+        this.previousView = this.currentView;
         this.currentView = 'session-prep';
         this.requestUpdate();
     }
@@ -465,7 +471,9 @@ export class AssistantApp extends LitElement {
     }
 
     handleBackClick() {
-        this.currentView = 'main';
+        // Return to previous view, or default to main if no previous view
+        this.currentView = this.previousView || 'main';
+        this.previousView = 'main'; // Reset to main for next time
         this.requestUpdate();
     }
 
