@@ -3,13 +3,18 @@
 ## Project Overview
 
 Electron-based AI assistant using Google Gemini API. Features include:
-- Real-time AI conversations
+- Real-time AI conversations via native audio WebSocket streaming
 - Co-Pilot mode for structured, goal-driven sessions
 - RAG (Retrieval-Augmented Generation) for dynamic document context injection
 - Document ingestion via Gemini API OCR with chunking and embedding
+- Real-time translation of live speech between 28 languages
+- Screen analysis with automated/manual screenshot capture and AI interpretation
+- Model fallback with daily rate limiting (Flash -> Flash-Lite)
+- Google Search integration for real-time information during sessions
 - Custom AI profiles (user-created personas with custom system prompts)
 - Post-session summary generation and .docx export
 - Session history management
+- Configurable audio modes (speaker only, mic only, both)
 - Customizable keybinds
 - Cross-platform support (Windows, macOS, Linux)
 
@@ -53,28 +58,30 @@ Electron-based AI assistant using Google Gemini API. Features include:
 
 ```
 src/
-├── index.js              # Main process entry
-├── preload.js            # Preload script (IPC bridge)
-├── storage.js            # JSON persistence layer
-├── audioUtils.js         # Audio capture utilities
+├── index.js              # Main process entry, IPC handlers
+├── preload.js            # Preload script (IPC context bridge, channel allowlists)
+├── storage.js            # JSON persistence layer, rate limiting, model fallback
+├── audioUtils.js         # Audio PCM/WAV utilities, debug audio saving
 ├── components/
 │   ├── index.js          # Component exports
 │   ├── app/
 │   │   ├── AssistantApp.js   # Main app component (state, routing, co-pilot orchestration)
-│   │   └── AppHeader.js      # Header component
+│   │   └── AppHeader.js      # Header with nav and theme controls
 │   ├── ui/
-│   │   └── SkeletonLoader.js # Loading skeleton with shimmer animation
+│   │   ├── SkeletonLoader.js # Loading skeleton with shimmer animation
+│   │   ├── LoadingSpinner.js # Animated loading spinner
+│   │   └── RequestStatus.js  # Status display with spinner and actions
 │   └── views/
 │       ├── MainView.js           # Main view (Start + Prepare + Templates)
-│       ├── AssistantView.js      # AI response display (silent notes parsing)
+│       ├── AssistantView.js      # AI response display, screen analysis, translation UI
 │       ├── SessionPrepView.js    # Co-Pilot pre-session setup form (auto-save drafts, save as template)
 │       ├── SessionSummaryView.js # Post-session summary, notes view/export
-│       ├── OnboardingView.js     # Setup wizard
+│       ├── OnboardingView.js     # Setup wizard with intro slides
 │       ├── HistoryView.js        # Session history (search, filter by profile/date/co-pilot)
-│       ├── CustomizeView.js      # Settings (includes custom profiles management)
+│       ├── CustomizeView.js      # Settings (profiles, keybinds, translation, audio config)
 │       └── HelpView.js           # Help/docs
 └── utils/
-    ├── gemini.js         # Gemini API integration (live session + HTTP API + RAG)
+    ├── gemini.js         # Gemini API integration (live session + HTTP API + RAG + translation)
     ├── prompts.js        # AI prompt templates (profile-based, RAG-aware)
     ├── copilotPrompts.js # Co-Pilot context and behavioral instructions
     ├── chunker.js        # Text chunking for RAG (fixed-size overlapping chunks)
@@ -83,8 +90,9 @@ src/
     ├── notesParser.js    # Parse [NOTES], [REFOCUS], [ADVANCE] markers from AI
     ├── notesExporter.js  # Export session notes to .docx
     ├── documentParser.js # Document text extraction (plain text + Gemini OCR)
-    ├── renderer.js       # Renderer utilities
-    ├── window.js         # Window management
+    ├── requestState.js   # Request lifecycle state constants (IDLE, SENDING, STREAMING, etc.)
+    ├── renderer.js       # Renderer utilities, storage API wrapper, screenshot capture
+    ├── window.js         # Window management, global shortcuts, lifecycle
     └── windowResize.js   # Resize handlers
 ```
 
@@ -98,15 +106,16 @@ src/
 
 ### Storage Domains
 
-- Config: App configuration
-- Credentials: API keys
-- Preferences: User preferences
-- Keybinds: Keyboard shortcuts
-- Sessions: Chat history (with co-pilot prep, notes, summary)
-- CoPilotPrep: Structured session preparation data
-- Embeddings: Vector embeddings for RAG (`embeddings/` directory, one JSON file per document)
-- CustomProfiles: User-created AI profiles (`custom-profiles.json`)
-- Templates: Reusable session preparation templates (`templates.json`)
+- **Config** (`config.json`): App configuration (`configVersion`, `onboarded`, `layout`)
+- **Credentials** (`credentials.json`): API keys
+- **Preferences** (`preferences.json`): User preferences (profile, language, audio mode, font size, transparency, translation config, screenshot settings, Google Search toggle)
+- **Keybinds** (`keybinds.json`): Keyboard shortcuts
+- **Limits** (`limits.json`): Daily rate limiting per model (`gemini-2.5-flash`: 20/day, `gemini-2.5-flash-lite`: 20/day)
+- **Sessions** (`history/*.json`): Chat history per session (conversation, screen analysis, co-pilot prep, notes, summary)
+- **CoPilotPrep** (`copilot-prep.json`): Structured session preparation data (goal, outcome, criteria, topics, documents)
+- **Embeddings** (`embeddings/*.json`): Vector embeddings for RAG (one JSON file per document)
+- **CustomProfiles** (`custom-profiles.json`): User-created AI profiles
+- **Templates** (`templates.json`): Reusable session preparation templates
 
 ### Co-Pilot Data Flow
 
@@ -136,6 +145,43 @@ Fallback Mode (no embeddings):
   Full document text injected inline in system prompt
 ```
 
+### Translation Flow
+
+```
+User enables translation in Settings (source + target language)
+  -> IPC 'translation:set-config' -> gemini.setTranslationConfig()
+  -> Speech language updated to match source language
+
+During Session:
+  Gemini transcription -> handleTranscriptionForTranslation(text, speaker)
+  -> Buffer until sentence boundary or word threshold (8 words)
+  -> Queue translation request (max 20 queued, max 3 concurrent)
+  -> translateText() via Gemini HTTP API (hardened prompt)
+  -> 'translation-result' event to renderer
+  -> AssistantView displays original + translated text with speaker labels
+```
+
+### Screen Analysis Flow
+
+```
+Auto-capture (interval-based) or manual trigger
+  -> renderer.captureScreenshot() -> desktopCapturer API
+  -> IPC 'send-image-content' with base64 image + prompt
+  -> Gemini HTTP API analyzes screenshot
+  -> 'save-screen-analysis' event to renderer
+  -> Stored in session's screenAnalysisHistory
+```
+
+### Model Fallback
+
+```
+storage.getAvailableModel()
+  -> Check today's usage for gemini-2.5-flash (limit: 20/day)
+  -> If under limit: use flash
+  -> If over limit: fall back to gemini-2.5-flash-lite (limit: 20/day)
+  -> If both exhausted: default to flash (for paid API users)
+```
+
 ### Co-Pilot Notes Flow
 
 - AI responses include `[NOTES]...[/NOTES]` markers
@@ -147,14 +193,36 @@ Fallback Mode (no embeddings):
 ### IPC Channels
 
 **Storage:**
-- `storage:get-copilot-prep`, `storage:set-copilot-prep`, `storage:update-copilot-prep`
-- `storage:get-custom-profiles` - Get all custom profiles
-- `storage:save-custom-profile` - Save or update a custom profile
-- `storage:delete-custom-profile` - Delete a custom profile
-- `storage:get-templates` - Get all session templates
-- `storage:save-template` - Save or update a template
-- `storage:delete-template` - Delete a template
-- `storage:clear-copilot-prep` - Reset co-pilot prep to defaults
+- `storage:get-config`, `storage:set-config`, `storage:update-config`
+- `storage:get-credentials`, `storage:set-credentials`, `storage:get-api-key`, `storage:set-api-key`
+- `storage:get-preferences`, `storage:set-preferences`, `storage:update-preference`
+- `storage:get-keybinds`, `storage:set-keybinds`
+- `storage:get-all-sessions`, `storage:get-session`, `storage:save-session`, `storage:delete-session`, `storage:delete-all-sessions`
+- `storage:get-today-limits` - Rate limiting per model
+- `storage:get-copilot-prep`, `storage:set-copilot-prep`, `storage:update-copilot-prep`, `storage:clear-copilot-prep`
+- `storage:get-templates`, `storage:save-template`, `storage:delete-template`
+- `storage:get-custom-profiles`, `storage:save-custom-profile`, `storage:delete-custom-profile`
+- `storage:clear-all`
+
+**Gemini Session:**
+- `initialize-gemini` - Start live AI session with profile, language, co-pilot prep
+- `close-session` - End current session
+- `get-current-session` - Check if session is active
+- `start-new-session` - Start fresh session
+- `cancel-current-request` - Cancel in-flight request
+- `send-audio-content` - System/speaker audio (PCM)
+- `send-mic-audio-content` - Microphone audio (PCM)
+- `send-image-content` - Screenshot/image analysis with prompt
+- `send-text-message` - Text-based queries
+- `update-google-search-setting` - Enable/disable Google Search tool
+
+**Translation:**
+- `translation:set-config` - Configure source/target language and enable/disable
+- `translation:get-config` - Get current translation config
+
+**Audio (macOS):**
+- `start-macos-audio` - Start system audio capture via SystemAudioDump
+- `stop-macos-audio` - Stop system audio capture
 
 **Co-Pilot:**
 - `copilot:open-file-dialog` - File picker + text extraction + chunking + embedding
@@ -164,14 +232,39 @@ Fallback Mode (no embeddings):
 - `copilot:delete-document-embeddings` - Delete embeddings for a document
 - `copilot:get-all-embeddings` - Get all stored embeddings
 
-**Theme:**
+**General:**
 - `get-native-theme` - Query OS dark/light mode preference
+- `get-app-version` - Get Electron app version
+- `quit-application` - Quit the app
+- `open-external` - Open URL in default browser
+- `update-keybinds` - Fire-and-forget keybind update
+- `log-message` - Fire-and-forget logging
 
 **Events (Main -> Renderer):**
+- `new-response` - New AI response started
+- `update-response` - AI response streaming update
+- `response-complete` - AI response finished
+- `request-cancelled` - Request was cancelled
+- `update-status` - Session status update
+- `session-initializing` - Session setup in progress
+- `reconnect-failed` - Auto-reconnect exhausted
+- `navigate-previous-response`, `navigate-next-response` - Response navigation
+- `scroll-response-up`, `scroll-response-down` - Scroll controls
+- `click-through-toggled` - Click-through mode changed
+- `save-conversation-turn` - Save user-AI exchange to session
+- `save-session-context` - Initialize session with profile
+- `save-screen-analysis` - Save screen analysis results
+- `clear-sensitive-data` - Wipe visible data (emergency erase)
 - `document-upload-progress` - Progress updates during document upload (stages: parsing, embedding, done, error)
 - `native-theme-changed` - OS theme changed (boolean: shouldUseDarkColors)
+- `translation-result` - Translation completion (original, translated, speaker, timestamp)
 
-## Available Commands
+**Events (Renderer -> Main):**
+- `update-keybinds` - Keybind configuration changed
+- `view-changed` - Navigation event
+- `log-message` - Renderer-side logging
+
+## npm Commands
 
 - `npm start` - Run in development
 - `npm run package` - Package for current platform

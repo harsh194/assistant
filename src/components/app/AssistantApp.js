@@ -117,6 +117,7 @@ export class AssistantApp extends LitElement {
         copilotActive: { type: Boolean },
         copilotPrep: { type: Object },
         accumulatedNotes: { type: Object },
+        translationEnabled: { type: Boolean },
     };
 
     constructor() {
@@ -146,6 +147,7 @@ export class AssistantApp extends LitElement {
         this.copilotPrep = null;
         this.accumulatedNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
         this._copilotSessionId = null;
+        this.translationEnabled = false;
 
         // Load from storage
         this._loadFromStorage();
@@ -270,29 +272,23 @@ export class AssistantApp extends LitElement {
         // Mark response as complete when we get certain status messages
         if (text.includes('Ready') || text.includes('Listening') || text.includes('Error')) {
             this._currentResponseIsComplete = true;
-            console.log('[setStatus] Marked current response as complete');
         }
     }
 
     addNewResponse(response) {
-        // Add a new response entry (first word of a new AI response)
         this.responses = [...this.responses, response];
         this.currentResponseIndex = this.responses.length - 1;
         this._awaitingNewResponse = false;
-        console.log('[addNewResponse] Added:', response);
         this.requestUpdate();
     }
 
     updateCurrentResponse(response) {
-        // Update the current response in place (streaming subsequent words)
         if (this.responses.length > 0) {
-            this.responses = [...this.responses.slice(0, -1), response];
-            console.log('[updateCurrentResponse] Updated to:', response);
+            this.responses[this.responses.length - 1] = response;
+            this.responses = [...this.responses];
         } else {
-            // Fallback: if no responses exist, add as new
             this.addNewResponse(response);
         }
-        this.requestUpdate();
     }
 
     // Header event handlers
@@ -322,6 +318,12 @@ export class AssistantApp extends LitElement {
             }
 
             assistant.stopCapture();
+
+            // Disable translation
+            if (this.translationEnabled) {
+                this.translationEnabled = false;
+                window.electronAPI.invoke('translation:set-config', { enabled: false }).catch(() => {});
+            }
 
             // Close the session and save co-pilot data if active
             if (window.electronAPI) {
@@ -390,6 +392,19 @@ export class AssistantApp extends LitElement {
             return;
         }
 
+        // Check translation config from preferences
+        const translationPrefs = await assistant.storage.getTranslationConfig();
+        if (translationPrefs.enabled && translationPrefs.targetLanguage) {
+            this.translationEnabled = true;
+            await window.electronAPI.invoke('translation:set-config', {
+                enabled: true,
+                sourceLanguage: translationPrefs.sourceLanguage || '',
+                targetLanguage: translationPrefs.targetLanguage,
+            });
+        } else {
+            this.translationEnabled = false;
+        }
+
         await assistant.initializeGemini(this.selectedProfile, this.selectedLanguage);
         // Pass the screenshot interval as string (including 'manual' option)
         assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
@@ -423,6 +438,18 @@ export class AssistantApp extends LitElement {
         this.copilotActive = true;
         this.copilotPrep = prepData;
         this.accumulatedNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
+
+        // Configure translation if enabled in prep data
+        if (prepData.translationEnabled && prepData.translationTargetLanguage) {
+            this.translationEnabled = true;
+            await window.electronAPI.invoke('translation:set-config', {
+                enabled: true,
+                sourceLanguage: prepData.translationSourceLanguage || '',
+                targetLanguage: prepData.translationTargetLanguage,
+            });
+        } else {
+            this.translationEnabled = false;
+        }
 
         await assistant.initializeGemini(this.selectedProfile, this.selectedLanguage, prepData);
         assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
@@ -586,6 +613,7 @@ export class AssistantApp extends LitElement {
                         .shouldAnimateResponse=${this.shouldAnimateResponse}
                         .copilotActive=${this.copilotActive}
                         .copilotPrep=${this.copilotPrep}
+                        .translationEnabled=${this.translationEnabled}
                         @response-index-changed=${this.handleResponseIndexChanged}
                         @notes-updated=${(e) => {
                         this.accumulatedNotes = e.detail.notes;

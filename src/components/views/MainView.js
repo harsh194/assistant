@@ -204,6 +204,67 @@ export class MainView extends LitElement {
             text-align: center;
             margin-top: 16px;
         }
+
+        .translation-section {
+            margin-top: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            padding: 10px 14px;
+        }
+
+        .translation-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .translation-toggle input[type="checkbox"] {
+            cursor: pointer;
+            accent-color: var(--btn-primary-bg);
+        }
+
+        .translation-toggle label {
+            font-size: 12px;
+            color: var(--text-color);
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .translation-langs {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .translation-langs .lang-group {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .translation-langs .lang-label {
+            font-size: 10px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .translation-langs select {
+            background: var(--input-background);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 6px 8px;
+            border-radius: var(--border-radius);
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .translation-langs select:focus {
+            outline: none;
+            border-color: var(--border-default);
+        }
     `;
 
     static properties = {
@@ -216,6 +277,9 @@ export class MainView extends LitElement {
         showApiKeyError: { type: Boolean },
         _hasDraft: { state: true },
         _templates: { state: true },
+        _translationEnabled: { state: true },
+        _translationSourceLang: { state: true },
+        _translationTargetLang: { state: true },
     };
 
     constructor() {
@@ -231,12 +295,68 @@ export class MainView extends LitElement {
         this.apiKey = '';
         this._hasDraft = false;
         this._templates = [];
+        this._translationEnabled = false;
+        this._translationSourceLang = '';
+        this._translationTargetLang = '';
         this._loadApiKey();
+        this._loadTranslationConfig();
     }
 
     async _loadApiKey() {
         this.apiKey = await assistant.storage.getApiKey();
         this.requestUpdate();
+    }
+
+    async _loadTranslationConfig() {
+        try {
+            const config = await assistant.storage.getTranslationConfig();
+            this._translationEnabled = config.enabled || false;
+            this._translationSourceLang = config.sourceLanguage || '';
+            this._translationTargetLang = config.targetLanguage || '';
+        } catch (error) {
+            // Use defaults
+        }
+    }
+
+    async _saveTranslationConfig() {
+        await assistant.storage.setTranslationConfig({
+            enabled: this._translationEnabled,
+            sourceLanguage: this._translationSourceLang,
+            targetLanguage: this._translationTargetLang,
+        });
+    }
+
+    _getLanguageOptions() {
+        return [
+            { code: 'en', name: 'English' },
+            { code: 'es', name: 'Spanish' },
+            { code: 'fr', name: 'French' },
+            { code: 'de', name: 'German' },
+            { code: 'it', name: 'Italian' },
+            { code: 'pt', name: 'Portuguese' },
+            { code: 'ru', name: 'Russian' },
+            { code: 'zh', name: 'Chinese (Mandarin)' },
+            { code: 'ja', name: 'Japanese' },
+            { code: 'ko', name: 'Korean' },
+            { code: 'ar', name: 'Arabic' },
+            { code: 'hi', name: 'Hindi' },
+            { code: 'tr', name: 'Turkish' },
+            { code: 'nl', name: 'Dutch' },
+            { code: 'pl', name: 'Polish' },
+            { code: 'sv', name: 'Swedish' },
+            { code: 'da', name: 'Danish' },
+            { code: 'fi', name: 'Finnish' },
+            { code: 'no', name: 'Norwegian' },
+            { code: 'th', name: 'Thai' },
+            { code: 'vi', name: 'Vietnamese' },
+            { code: 'id', name: 'Indonesian' },
+            { code: 'ms', name: 'Malay' },
+            { code: 'uk', name: 'Ukrainian' },
+            { code: 'cs', name: 'Czech' },
+            { code: 'ro', name: 'Romanian' },
+            { code: 'el', name: 'Greek' },
+            { code: 'he', name: 'Hebrew' },
+        ];
     }
 
     async _checkDraft() {
@@ -377,6 +497,57 @@ export class MainView extends LitElement {
                                     <option value="${t.id}">${t.name}</option>
                                 `)}
                             </select>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="translation-section">
+                    <div class="translation-toggle">
+                        <input
+                            type="checkbox"
+                            id="mainTranslation"
+                            .checked=${this._translationEnabled}
+                            @change=${e => {
+                                this._translationEnabled = e.target.checked;
+                                this._saveTranslationConfig();
+                            }}
+                        />
+                        <label for="mainTranslation">Real-time translation</label>
+                    </div>
+                    ${this._translationEnabled ? html`
+                        <div class="translation-langs">
+                            <div class="lang-group">
+                                <span class="lang-label">Source (spoken by others)</span>
+                                <select
+                                    .value=${this._translationSourceLang}
+                                    @change=${e => {
+                                        this._translationSourceLang = e.target.value;
+                                        this._saveTranslationConfig();
+                                    }}>
+                                    <option value="">Auto-detect</option>
+                                    ${this._getLanguageOptions().map(lang => html`
+                                        <option value=${lang.code} ?selected=${this._translationSourceLang === lang.code}>
+                                            ${lang.name}
+                                        </option>
+                                    `)}
+                                </select>
+                            </div>
+                            <div class="lang-group">
+                                <span class="lang-label">Target (your language)</span>
+                                <select
+                                    .value=${this._translationTargetLang}
+                                    @change=${e => {
+                                        this._translationTargetLang = e.target.value;
+                                        this._saveTranslationConfig();
+                                    }}>
+                                    <option value="">Select language</option>
+                                    ${this._getLanguageOptions().map(lang => html`
+                                        <option value=${lang.code} ?selected=${this._translationTargetLang === lang.code}>
+                                            ${lang.name}
+                                        </option>
+                                    `)}
+                                </select>
+                            </div>
                         </div>
                     ` : ''}
                 </div>

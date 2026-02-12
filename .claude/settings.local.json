@@ -17,7 +17,10 @@
       "Bash(ls:*)",
       "Bash(echo:*)",
       "Bash(grep:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\ndocs: add detailed project article for website publication\n\nNarrative-driven technical article covering the three core engineering\nideas \\(ghost window, dual-layer thinking, live RAG\\), with real code\nsnippets from the codebase, a full session walkthrough, and honest\nwar stories about what went wrong.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(dir:*)",
+      "Bash(where:*)"
     ]
   }
 }

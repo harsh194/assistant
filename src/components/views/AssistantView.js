@@ -296,6 +296,191 @@ export class AssistantView extends LitElement {
             color: var(--text-color);
             background: var(--hover-background);
         }
+
+        /* Mode indicator bar */
+        .mode-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 6px 12px;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            flex-shrink: 0;
+        }
+
+        .mode-tab {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid transparent;
+            padding: 4px 12px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.1s ease;
+            font-family: inherit;
+        }
+
+        .mode-tab.active {
+            color: var(--text-color);
+            border-color: var(--border-color);
+            background: var(--bg-tertiary);
+        }
+
+        .mode-tab:hover:not(.active) {
+            color: var(--text-secondary);
+        }
+
+        .mode-key {
+            background: var(--bg-tertiary);
+            padding: 1px 5px;
+            border-radius: 2px;
+            font-size: 10px;
+            font-family: 'SF Mono', Monaco, monospace;
+            margin-left: 4px;
+        }
+
+        .peek-toggle {
+            margin-left: auto;
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid transparent;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        .peek-toggle.active {
+            color: var(--text-secondary);
+            border-color: var(--border-color);
+        }
+
+        .peek-toggle:hover {
+            color: var(--text-secondary);
+        }
+
+        /* Translation container */
+        .translation-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            scroll-behavior: smooth;
+        }
+
+        .translation-container::-webkit-scrollbar { width: 8px; }
+        .translation-container::-webkit-scrollbar-track { background: transparent; }
+        .translation-container::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+
+        .translation-empty {
+            color: var(--text-muted);
+            font-size: 14px;
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .translation-entry {
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .translation-entry:last-child {
+            border-bottom: none;
+        }
+
+        .translation-speaker {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        .translation-original {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 6px;
+            user-select: text;
+            cursor: text;
+        }
+
+        .translation-translated {
+            font-size: var(--response-font-size, 18px);
+            color: var(--text-color);
+            line-height: 1.6;
+            font-weight: 500;
+            user-select: text;
+            cursor: text;
+        }
+
+        .translation-translated.error {
+            color: var(--error-color);
+            font-style: italic;
+            font-weight: 400;
+        }
+
+        /* Peek assistant overlay */
+        .peek-overlay {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            width: 280px;
+            max-height: 200px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+            z-index: 20;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .peek-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .peek-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 14px;
+            padding: 0 2px;
+            font-family: inherit;
+        }
+
+        .peek-close:hover {
+            color: var(--text-color);
+        }
+
+        .peek-content {
+            padding: 8px 10px;
+            font-size: 12px;
+            color: var(--text-color);
+            line-height: 1.5;
+            overflow-y: auto;
+            max-height: 160px;
+            user-select: text;
+            cursor: text;
+        }
+
+        .translation-wrapper {
+            position: relative;
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
     `;
 
     static properties = {
@@ -309,7 +494,11 @@ export class AssistantView extends LitElement {
         elapsedTime: { type: Number },
         copilotActive: { type: Boolean },
         copilotPrep: { type: Object },
+        translationEnabled: { type: Boolean },
         _copyFeedback: { state: true },
+        _translationMode: { state: true },
+        _translationEntries: { state: true },
+        _peekAssistantEnabled: { state: true },
     };
 
     constructor() {
@@ -324,7 +513,12 @@ export class AssistantView extends LitElement {
         this._elapsedTimer = null;
         this.copilotActive = false;
         this.copilotPrep = null;
+        this.translationEnabled = false;
+        this._lastRenderedLength = 0;
         this._copyFeedback = false;
+        this._translationMode = false;
+        this._translationEntries = [];
+        this._peekAssistantEnabled = false;
         this._sessionNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
         this._lastParsedResponse = '';
     }
@@ -356,26 +550,24 @@ export class AssistantView extends LitElement {
             : `Hey, Im listening to your ${profileNames[this.selectedProfile] || 'session'}?`;
     }
 
-    renderMarkdown(content) {
-        // Check if marked is available
+    renderMarkdown(content, skipSpanWrap = false) {
         if (typeof window !== 'undefined' && window.marked) {
             try {
-                // Configure marked for better security and formatting
                 window.marked.setOptions({
                     breaks: true,
                     gfm: true,
-                    sanitize: false, // We trust the AI responses
+                    sanitize: false,
                 });
                 let rendered = window.marked.parse(content);
-                rendered = this.wrapWordsInSpans(rendered);
+                if (!skipSpanWrap) {
+                    rendered = this.wrapWordsInSpans(rendered);
+                }
                 return rendered;
             } catch (error) {
-                console.warn('Error parsing markdown:', error);
-                return content; // Fallback to plain text
+                return content;
             }
         }
-        console.log('Marked not available, using plain text');
-        return content; // Fallback if marked is not available
+        return content;
     }
 
     wrapWordsInSpans(html) {
@@ -413,6 +605,7 @@ export class AssistantView extends LitElement {
     navigateToPreviousResponse() {
         if (this.currentResponseIndex > 0) {
             this.currentResponseIndex--;
+            this._lastRenderedLength = 0;
             this.dispatchEvent(
                 new CustomEvent('response-index-changed', {
                     detail: { index: this.currentResponseIndex },
@@ -425,6 +618,7 @@ export class AssistantView extends LitElement {
     navigateToNextResponse() {
         if (this.currentResponseIndex < this.responses.length - 1) {
             this.currentResponseIndex++;
+            this._lastRenderedLength = 0;
             this.dispatchEvent(
                 new CustomEvent('response-index-changed', {
                     detail: { index: this.currentResponseIndex },
@@ -474,6 +668,7 @@ export class AssistantView extends LitElement {
             }));
 
             this._cleanups.push(window.electronAPI.on('new-response', () => {
+                this._lastRenderedLength = 0;
                 this._setRequestState(RequestState.STREAMING);
             }));
 
@@ -501,6 +696,52 @@ export class AssistantView extends LitElement {
                     }
                 }
             }));
+
+            // Translation result listener
+            this._cleanups.push(window.electronAPI.on('translation-result', (data) => {
+                const MAX_ENTRIES = 500;
+                const updated = [...this._translationEntries, data];
+                this._translationEntries = updated.length > MAX_ENTRIES ? updated.slice(-MAX_ENTRIES) : updated;
+                if (this._translationMode) {
+                    this.scrollTranslationToBottom();
+                }
+            }));
+        }
+
+        // Keyboard shortcuts for translation mode switching
+        this._modeKeydownHandler = (e) => {
+            if (!this.translationEnabled) return;
+
+            // Don't intercept when input/textarea/contenteditable is focused
+            const activeEl = this.shadowRoot?.activeElement || document.activeElement;
+            const isInputFocused = activeEl && (
+                activeEl.tagName === 'INPUT' ||
+                activeEl.tagName === 'TEXTAREA' ||
+                activeEl.isContentEditable
+            );
+            if (isInputFocused) return;
+
+            if (e.key === 't' || e.key === 'T') {
+                e.preventDefault();
+                this._translationMode = true;
+            } else if (e.key === 'a' || e.key === 'A') {
+                e.preventDefault();
+                this._translationMode = false;
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+                this._translationMode = !this._translationMode;
+            } else if ((e.key === 'p' || e.key === 'P') && this._translationMode) {
+                e.preventDefault();
+                this._peekAssistantEnabled = !this._peekAssistantEnabled;
+            }
+        };
+        document.addEventListener('keydown', this._modeKeydownHandler);
+
+        // Reset translation state for new session and default to translation mode
+        if (this.translationEnabled) {
+            this._translationMode = true;
+            this._translationEntries = [];
+            this._peekAssistantEnabled = false;
         }
     }
 
@@ -517,6 +758,12 @@ export class AssistantView extends LitElement {
         if (this._cleanups) {
             this._cleanups.forEach(cleanup => cleanup && cleanup());
             this._cleanups = [];
+        }
+
+        // Clean up translation keyboard handler
+        if (this._modeKeydownHandler) {
+            document.removeEventListener('keydown', this._modeKeydownHandler);
+            this._modeKeydownHandler = null;
         }
     }
 
@@ -634,6 +881,15 @@ export class AssistantView extends LitElement {
         }, 0);
     }
 
+    scrollTranslationToBottom() {
+        setTimeout(() => {
+            const container = this.shadowRoot.querySelector('.translation-container');
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }, 0);
+    }
+
     firstUpdated() {
         super.firstUpdated();
         this.updateResponseContent();
@@ -647,48 +903,111 @@ export class AssistantView extends LitElement {
     }
 
     updateResponseContent() {
-        console.log('updateResponseContent called');
         const container = this.shadowRoot.querySelector('#responseContainer');
-        if (container) {
-            const currentResponse = this.getCurrentResponse();
-            console.log('Current response:', currentResponse);
+        if (!container) return;
 
-            let displayText = currentResponse;
+        const currentResponse = this.getCurrentResponse();
+        const isStreaming = this.requestState === RequestState.STREAMING;
+        let displayText = currentResponse;
 
-            // When co-pilot is active, parse out notes/markers silently
-            if (this.copilotActive && currentResponse) {
-                const parsed = parseResponse(currentResponse);
-                displayText = parsed.cleanText;
+        // Defer co-pilot notes parsing to completion - regex is expensive per chunk
+        if (this.copilotActive && currentResponse && !isStreaming) {
+            const parsed = parseResponse(currentResponse);
+            displayText = parsed.cleanText;
 
-                // Only accumulate notes if this is a new/changed response (prevent duplicates)
-                if (parsed.notes && currentResponse !== this._lastParsedResponse) {
-                    this._lastParsedResponse = currentResponse;
-                    this._sessionNotes = mergeNotes(this._sessionNotes, parsed.notes);
-                    this.dispatchEvent(new CustomEvent('notes-updated', {
-                        detail: { notes: this._sessionNotes },
-                        bubbles: true,
-                        composed: true,
-                    }));
-                }
+            if (parsed.notes && currentResponse !== this._lastParsedResponse) {
+                this._lastParsedResponse = currentResponse;
+                this._sessionNotes = mergeNotes(this._sessionNotes, parsed.notes);
+                this.dispatchEvent(new CustomEvent('notes-updated', {
+                    detail: { notes: this._sessionNotes },
+                    bubbles: true,
+                    composed: true,
+                }));
             }
+        }
 
-            const renderedResponse = this.renderMarkdown(displayText);
-            console.log('Rendered response:', renderedResponse);
+        if (isStreaming && displayText && displayText.length > this._lastRenderedLength) {
+            const renderedResponse = this.renderMarkdown(displayText, true);
             container.innerHTML = renderedResponse;
-            // Show all words immediately (no animation)
-            if (this.shouldAnimateResponse) {
-                this.dispatchEvent(new CustomEvent('response-animation-complete', { bubbles: true, composed: true }));
-            }
-        } else {
-            console.log('Response container not found');
+            this._lastRenderedLength = displayText.length;
+        } else if (!isStreaming) {
+            const renderedResponse = this.renderMarkdown(displayText || '');
+            container.innerHTML = renderedResponse;
+            this._lastRenderedLength = 0;
+        }
+
+        if (this.shouldAnimateResponse) {
+            this.dispatchEvent(new CustomEvent('response-animation-complete', { bubbles: true, composed: true }));
         }
     }
 
-    render() {
+    renderModeIndicator() {
+        return html`
+            <div class="mode-indicator">
+                <button
+                    class="mode-tab ${!this._translationMode ? 'active' : ''}"
+                    @click=${() => { this._translationMode = false; }}>
+                    Assistant <span class="mode-key">A</span>
+                </button>
+                <button
+                    class="mode-tab ${this._translationMode ? 'active' : ''}"
+                    @click=${() => { this._translationMode = true; }}>
+                    Translation <span class="mode-key">T</span>
+                </button>
+                ${this._translationMode ? html`
+                    <button
+                        class="peek-toggle ${this._peekAssistantEnabled ? 'active' : ''}"
+                        @click=${() => { this._peekAssistantEnabled = !this._peekAssistantEnabled; }}>
+                        Peek <span class="mode-key">P</span>
+                    </button>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    renderPeekAssistant() {
+        const latestResponse = this.getCurrentResponse();
+        // Truncate for the peek view
+        const truncated = latestResponse.length > 300 ? latestResponse.substring(0, 300) + '...' : latestResponse;
+        return html`
+            <div class="peek-overlay">
+                <div class="peek-header">
+                    <span>Assistant</span>
+                    <button class="peek-close" @click=${() => { this._peekAssistantEnabled = false; }}>x</button>
+                </div>
+                <div class="peek-content">${truncated}</div>
+            </div>
+        `;
+    }
+
+    renderTranslationMode() {
+        return html`
+            ${this.renderModeIndicator()}
+            <div class="translation-wrapper">
+                <div class="translation-container">
+                    ${this._translationEntries.length === 0
+                        ? html`<div class="translation-empty">Listening for speech to translate...</div>`
+                        : this._translationEntries.map(entry => html`
+                            <div class="translation-entry">
+                                ${entry.speaker ? html`<span class="translation-speaker">${entry.speaker}</span>` : ''}
+                                <div class="translation-original">${entry.original}</div>
+                                <div class="translation-translated ${entry.error ? 'error' : ''}">${entry.translated}</div>
+                            </div>
+                        `)
+                    }
+                </div>
+                ${this._peekAssistantEnabled ? this.renderPeekAssistant() : ''}
+            </div>
+        `;
+    }
+
+    renderAssistantMode() {
         const responseCounter = this.getResponseCounter();
         const inProgress = this._isRequestInProgress();
 
         return html`
+            ${this.translationEnabled ? this.renderModeIndicator() : ''}
+
             <div class="response-wrapper">
                 <button class="copy-btn" @click=${this.handleCopyResponse}>
                     ${this._copyFeedback ? 'Copied!' : 'Copy'}
@@ -738,6 +1057,18 @@ export class AssistantView extends LitElement {
                 </button>
             </div>
         `;
+    }
+
+    render() {
+        if (!this.translationEnabled) {
+            return this.renderAssistantMode();
+        }
+
+        if (this._translationMode) {
+            return this.renderTranslationMode();
+        }
+
+        return this.renderAssistantMode();
     }
 }
 

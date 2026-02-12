@@ -307,6 +307,39 @@ export class SessionPrepView extends LitElement {
         .template-saved-msg.visible {
             opacity: 1;
         }
+
+        select.form-control {
+            background: var(--input-background);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        select.form-control:focus {
+            outline: none;
+            border-color: var(--border-default);
+        }
+
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .checkbox-row input[type="checkbox"] {
+            cursor: pointer;
+            accent-color: var(--btn-primary-bg);
+        }
+
+        .checkbox-row label {
+            font-size: 12px;
+            color: var(--text-color);
+            cursor: pointer;
+        }
     `;
 
     static properties = {
@@ -331,6 +364,9 @@ export class SessionPrepView extends LitElement {
             keyTopics: [],
             referenceDocuments: [],
             customNotes: '',
+            translationEnabled: false,
+            translationSourceLanguage: '',
+            translationTargetLanguage: '',
         };
         this._topicInput = '';
         this._isUploading = false;
@@ -469,8 +505,44 @@ export class SessionPrepView extends LitElement {
             keyTopics: [],
             referenceDocuments: [],
             customNotes: '',
+            translationEnabled: false,
+            translationSourceLanguage: '',
+            translationTargetLanguage: '',
         };
         this.requestUpdate();
+    }
+
+    _getLanguageOptions() {
+        return [
+            { code: 'en', name: 'English' },
+            { code: 'es', name: 'Spanish' },
+            { code: 'fr', name: 'French' },
+            { code: 'de', name: 'German' },
+            { code: 'it', name: 'Italian' },
+            { code: 'pt', name: 'Portuguese' },
+            { code: 'ru', name: 'Russian' },
+            { code: 'zh', name: 'Chinese (Mandarin)' },
+            { code: 'ja', name: 'Japanese' },
+            { code: 'ko', name: 'Korean' },
+            { code: 'ar', name: 'Arabic' },
+            { code: 'hi', name: 'Hindi' },
+            { code: 'tr', name: 'Turkish' },
+            { code: 'nl', name: 'Dutch' },
+            { code: 'pl', name: 'Polish' },
+            { code: 'sv', name: 'Swedish' },
+            { code: 'da', name: 'Danish' },
+            { code: 'fi', name: 'Finnish' },
+            { code: 'no', name: 'Norwegian' },
+            { code: 'th', name: 'Thai' },
+            { code: 'vi', name: 'Vietnamese' },
+            { code: 'id', name: 'Indonesian' },
+            { code: 'ms', name: 'Malay' },
+            { code: 'uk', name: 'Ukrainian' },
+            { code: 'cs', name: 'Czech' },
+            { code: 'ro', name: 'Romanian' },
+            { code: 'el', name: 'Greek' },
+            { code: 'he', name: 'Hebrew' },
+        ];
     }
 
     async _saveAsTemplate() {
@@ -627,6 +699,53 @@ export class SessionPrepView extends LitElement {
                         style="min-height: 60px;"
                     ></textarea>
                 </div>
+
+                <hr class="section-divider" />
+
+                <div class="form-group">
+                    <label class="form-label">Real-Time Translation</label>
+                    <div class="form-description">Translate conversation speech during the session</div>
+                    <div class="checkbox-row">
+                        <input
+                            type="checkbox"
+                            id="translationEnabled"
+                            .checked=${this.prepData.translationEnabled}
+                            @change=${e => this._saveField('translationEnabled', e.target.checked)}
+                        />
+                        <label for="translationEnabled">Enable translation mode</label>
+                    </div>
+                </div>
+
+                ${this.prepData.translationEnabled ? html`
+                    <div class="form-group">
+                        <label class="form-label">Source Language</label>
+                        <div class="form-description">Language spoken by others</div>
+                        <select class="form-control"
+                            .value=${this.prepData.translationSourceLanguage}
+                            @change=${e => this._saveField('translationSourceLanguage', e.target.value)}>
+                            <option value="">Auto-detect</option>
+                            ${this._getLanguageOptions().map(lang => html`
+                                <option value=${lang.code} ?selected=${this.prepData.translationSourceLanguage === lang.code}>
+                                    ${lang.name}
+                                </option>
+                            `)}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Target Language</label>
+                        <div class="form-description">Your language (translation output)</div>
+                        <select class="form-control"
+                            .value=${this.prepData.translationTargetLanguage}
+                            @change=${e => this._saveField('translationTargetLanguage', e.target.value)}>
+                            <option value="">Select target language</option>
+                            ${this._getLanguageOptions().map(lang => html`
+                                <option value=${lang.code} ?selected=${this.prepData.translationTargetLanguage === lang.code}>
+                                    ${lang.name}
+                                </option>
+                            `)}
+                        </select>
+                    </div>
+                ` : ''}
 
                 ${hasContent ? html`
                     <hr class="section-divider" />

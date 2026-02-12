@@ -140,6 +140,21 @@ const storage = {
     async getTodayLimits() {
         const result = await api.invoke('storage:get-today-limits');
         return result.success ? result.data : { flash: { count: 0 }, flashLite: { count: 0 } };
+    },
+
+    // Translation config
+    async getTranslationConfig() {
+        const prefs = await this.getPreferences();
+        return {
+            enabled: prefs.translationEnabled || false,
+            sourceLanguage: prefs.translationSourceLanguage || '',
+            targetLanguage: prefs.translationTargetLanguage || ''
+        };
+    },
+    async setTranslationConfig(config) {
+        await this.updatePreference('translationEnabled', config.enabled || false);
+        await this.updatePreference('translationSourceLanguage', config.sourceLanguage || '');
+        await this.updatePreference('translationTargetLanguage', config.targetLanguage || '');
     }
 };
 
@@ -165,11 +180,11 @@ function convertFloat32ToInt16(float32Array) {
 }
 
 function arrayBufferToBase64(buffer) {
-    let binary = '';
     const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
+    const CHUNK = 0x8000;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
     }
     return btoa(binary);
 }
@@ -378,20 +393,20 @@ function setupLinuxMicProcessing(micStream) {
     let audioBuffer = [];
     const samplesPerChunk = SAMPLE_RATE * AUDIO_CHUNK_DURATION;
 
-    micProcessor.onaudioprocess = async e => {
+    micProcessor.onaudioprocess = e => {
         const inputData = e.inputBuffer.getChannelData(0);
         audioBuffer.push(...inputData);
 
-        // Process audio in chunks
+        // Process audio in chunks (fire-and-forget to avoid blocking audio callback)
         while (audioBuffer.length >= samplesPerChunk) {
             const chunk = audioBuffer.splice(0, samplesPerChunk);
             const pcmData16 = convertFloat32ToInt16(chunk);
             const base64Data = arrayBufferToBase64(pcmData16.buffer);
 
-            await api.invoke('send-mic-audio-content', {
+            api.invoke('send-mic-audio-content', {
                 data: base64Data,
                 mimeType: 'audio/pcm;rate=24000',
-            });
+            }).catch(() => {});
         }
     };
 
@@ -411,20 +426,20 @@ function setupLinuxSystemAudioProcessing() {
     let audioBuffer = [];
     const samplesPerChunk = SAMPLE_RATE * AUDIO_CHUNK_DURATION;
 
-    audioProcessor.onaudioprocess = async e => {
+    audioProcessor.onaudioprocess = e => {
         const inputData = e.inputBuffer.getChannelData(0);
         audioBuffer.push(...inputData);
 
-        // Process audio in chunks
+        // Process audio in chunks (fire-and-forget to avoid blocking audio callback)
         while (audioBuffer.length >= samplesPerChunk) {
             const chunk = audioBuffer.splice(0, samplesPerChunk);
             const pcmData16 = convertFloat32ToInt16(chunk);
             const base64Data = arrayBufferToBase64(pcmData16.buffer);
 
-            await api.invoke('send-audio-content', {
+            api.invoke('send-audio-content', {
                 data: base64Data,
                 mimeType: 'audio/pcm;rate=24000',
-            });
+            }).catch(() => {});
         }
     };
 
@@ -441,20 +456,20 @@ function setupWindowsLoopbackProcessing() {
     let audioBuffer = [];
     const samplesPerChunk = SAMPLE_RATE * AUDIO_CHUNK_DURATION;
 
-    audioProcessor.onaudioprocess = async e => {
+    audioProcessor.onaudioprocess = e => {
         const inputData = e.inputBuffer.getChannelData(0);
         audioBuffer.push(...inputData);
 
-        // Process audio in chunks
+        // Process audio in chunks (fire-and-forget to avoid blocking audio callback)
         while (audioBuffer.length >= samplesPerChunk) {
             const chunk = audioBuffer.splice(0, samplesPerChunk);
             const pcmData16 = convertFloat32ToInt16(chunk);
             const base64Data = arrayBufferToBase64(pcmData16.buffer);
 
-            await api.invoke('send-audio-content', {
+            api.invoke('send-audio-content', {
                 data: base64Data,
                 mimeType: 'audio/pcm;rate=24000',
-            });
+            }).catch(() => {});
         }
     };
 

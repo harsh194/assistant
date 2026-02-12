@@ -10,6 +10,7 @@ const ALLOWED_RECEIVE_CHANNELS = [
     'clear-sensitive-data', 'session-initializing',
     'document-upload-progress',
     'native-theme-changed',
+    'translation-result',
 ];
 
 contextBridge.exposeInMainWorld('electronAPI', {

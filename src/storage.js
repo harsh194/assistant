@@ -27,7 +27,10 @@ const DEFAULT_PREFERENCES = {
     backgroundTransparency: 0.8,
     googleSearchEnabled: false,
     windowWidth: 500,
-    windowHeight: 600
+    windowHeight: 600,
+    translationEnabled: false,
+    translationSourceLanguage: '',
+    translationTargetLanguage: ''
 };
 
 const DEFAULT_COPILOT_PREP = {
