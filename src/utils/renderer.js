@@ -1,5 +1,5 @@
 // renderer.js
-const { ipcRenderer } = require('electron');
+const api = window.electronAPI;
 
 let mediaStream = null;
 let screenshotInterval = null;
@@ -18,100 +18,127 @@ let offscreenCanvas = null;
 let offscreenContext = null;
 let currentImageQuality = 'medium'; // Store current image quality for manual screenshots
 
-const isLinux = process.platform === 'linux';
-const isMacOS = process.platform === 'darwin';
+const isLinux = api.platform === 'linux';
+const isMacOS = api.platform === 'darwin';
 
 // ============ STORAGE API ============
 // Wrapper for IPC-based storage access
 const storage = {
     // Config
     async getConfig() {
-        const result = await ipcRenderer.invoke('storage:get-config');
+        const result = await api.invoke('storage:get-config');
         return result.success ? result.data : {};
     },
     async setConfig(config) {
-        return ipcRenderer.invoke('storage:set-config', config);
+        return api.invoke('storage:set-config', config);
     },
     async updateConfig(key, value) {
-        return ipcRenderer.invoke('storage:update-config', key, value);
+        return api.invoke('storage:update-config', key, value);
     },
 
     // Credentials
     async getCredentials() {
-        const result = await ipcRenderer.invoke('storage:get-credentials');
+        const result = await api.invoke('storage:get-credentials');
         return result.success ? result.data : {};
     },
     async setCredentials(credentials) {
-        return ipcRenderer.invoke('storage:set-credentials', credentials);
+        return api.invoke('storage:set-credentials', credentials);
     },
     async getApiKey() {
-        const result = await ipcRenderer.invoke('storage:get-api-key');
+        const result = await api.invoke('storage:get-api-key');
         return result.success ? result.data : '';
     },
     async setApiKey(apiKey) {
-        return ipcRenderer.invoke('storage:set-api-key', apiKey);
+        return api.invoke('storage:set-api-key', apiKey);
     },
 
     // Preferences
     async getPreferences() {
-        const result = await ipcRenderer.invoke('storage:get-preferences');
+        const result = await api.invoke('storage:get-preferences');
         return result.success ? result.data : {};
     },
     async setPreferences(preferences) {
-        return ipcRenderer.invoke('storage:set-preferences', preferences);
+        return api.invoke('storage:set-preferences', preferences);
     },
     async updatePreference(key, value) {
-        return ipcRenderer.invoke('storage:update-preference', key, value);
+        return api.invoke('storage:update-preference', key, value);
     },
 
     // Keybinds
     async getKeybinds() {
-        const result = await ipcRenderer.invoke('storage:get-keybinds');
+        const result = await api.invoke('storage:get-keybinds');
         return result.success ? result.data : null;
     },
     async setKeybinds(keybinds) {
-        return ipcRenderer.invoke('storage:set-keybinds', keybinds);
+        return api.invoke('storage:set-keybinds', keybinds);
     },
 
     // Sessions (History)
     async getAllSessions() {
-        const result = await ipcRenderer.invoke('storage:get-all-sessions');
+        const result = await api.invoke('storage:get-all-sessions');
         return result.success ? result.data : [];
     },
     async getSession(sessionId) {
-        const result = await ipcRenderer.invoke('storage:get-session', sessionId);
+        const result = await api.invoke('storage:get-session', sessionId);
         return result.success ? result.data : null;
     },
     async saveSession(sessionId, data) {
-        return ipcRenderer.invoke('storage:save-session', sessionId, data);
+        return api.invoke('storage:save-session', sessionId, data);
     },
     async deleteSession(sessionId) {
-        return ipcRenderer.invoke('storage:delete-session', sessionId);
+        return api.invoke('storage:delete-session', sessionId);
     },
     async deleteAllSessions() {
-        return ipcRenderer.invoke('storage:delete-all-sessions');
+        return api.invoke('storage:delete-all-sessions');
     },
 
     // Co-Pilot Prep
     async getCoPilotPrep() {
-        const result = await ipcRenderer.invoke('storage:get-copilot-prep');
+        const result = await api.invoke('storage:get-copilot-prep');
         return result.success ? result.data : {};
     },
     async setCoPilotPrep(data) {
-        return ipcRenderer.invoke('storage:set-copilot-prep', data);
+        return api.invoke('storage:set-copilot-prep', data);
     },
     async updateCoPilotPrep(key, value) {
-        return ipcRenderer.invoke('storage:update-copilot-prep', key, value);
+        return api.invoke('storage:update-copilot-prep', key, value);
+    },
+    async clearCoPilotPrep() {
+        return api.invoke('storage:clear-copilot-prep');
+    },
+
+    // Templates
+    async getTemplates() {
+        const result = await api.invoke('storage:get-templates');
+        return result.success ? result.data : [];
+    },
+    async saveTemplate(template) {
+        return api.invoke('storage:save-template', template);
+    },
+    async deleteTemplate(templateId) {
+        return api.invoke('storage:delete-template', templateId);
+    },
+
+    // Custom Profiles
+    async getCustomProfiles() {
+        const result = await api.invoke('storage:get-custom-profiles');
+        return result.success ? result.data : [];
+    },
+    async saveCustomProfile(profile) {
+        return api.invoke('storage:save-custom-profile', profile);
+    },
+    async deleteCustomProfile(profileId) {
+        return api.invoke('storage:delete-custom-profile', profileId);
     },
 
     // Clear all
     async clearAll() {
-        return ipcRenderer.invoke('storage:clear-all');
+        return api.invoke('storage:clear-all');
     },
 
     // Limits
     async getTodayLimits() {
-        const result = await ipcRenderer.invoke('storage:get-today-limits');
+        const result = await api.invoke('storage:get-today-limits');
         return result.success ? result.data : { flash: { count: 0 }, flashLite: { count: 0 } };
     }
 };
@@ -151,7 +178,13 @@ async function initializeGemini(profile = 'interview', language = 'en-US', copil
     const apiKey = await storage.getApiKey();
     if (apiKey) {
         const prefs = await storage.getPreferences();
-        const success = await ipcRenderer.invoke('initialize-gemini', apiKey, prefs.customPrompt || '', profile, language, copilotPrep);
+        let customProfileData = null;
+        if (profile.startsWith('custom-')) {
+            const customProfiles = await storage.getCustomProfiles();
+            const profileId = profile.replace('custom-', '');
+            customProfileData = customProfiles.find(p => p.id === profileId) || null;
+        }
+        const success = await api.invoke('initialize-gemini', apiKey, prefs.customPrompt || '', profile, language, copilotPrep, customProfileData);
         if (success) {
             assistant.setStatus('Live');
         } else {
@@ -161,7 +194,7 @@ async function initializeGemini(profile = 'interview', language = 'en-US', copil
 }
 
 // Listen for status updates
-ipcRenderer.on('update-status', (event, status) => {
+api.on('update-status', (status) => {
     console.log('Status update:', status);
     assistant.setStatus(status);
 });
@@ -180,7 +213,7 @@ async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'mediu
             console.log('Starting macOS capture with SystemAudioDump...');
 
             // Start macOS audio capture
-            const audioResult = await ipcRenderer.invoke('start-macos-audio');
+            const audioResult = await api.invoke('start-macos-audio');
             if (!audioResult.success) {
                 throw new Error('Failed to start macOS audio capture: ' + audioResult.error);
             }
@@ -355,7 +388,7 @@ function setupLinuxMicProcessing(micStream) {
             const pcmData16 = convertFloat32ToInt16(chunk);
             const base64Data = arrayBufferToBase64(pcmData16.buffer);
 
-            await ipcRenderer.invoke('send-mic-audio-content', {
+            await api.invoke('send-mic-audio-content', {
                 data: base64Data,
                 mimeType: 'audio/pcm;rate=24000',
             });
@@ -388,7 +421,7 @@ function setupLinuxSystemAudioProcessing() {
             const pcmData16 = convertFloat32ToInt16(chunk);
             const base64Data = arrayBufferToBase64(pcmData16.buffer);
 
-            await ipcRenderer.invoke('send-audio-content', {
+            await api.invoke('send-audio-content', {
                 data: base64Data,
                 mimeType: 'audio/pcm;rate=24000',
             });
@@ -418,7 +451,7 @@ function setupWindowsLoopbackProcessing() {
             const pcmData16 = convertFloat32ToInt16(chunk);
             const base64Data = arrayBufferToBase64(pcmData16.buffer);
 
-            await ipcRenderer.invoke('send-audio-content', {
+            await api.invoke('send-audio-content', {
                 data: base64Data,
                 mimeType: 'audio/pcm;rate=24000',
             });
@@ -504,7 +537,7 @@ async function captureScreenshot(imageQuality = 'medium', isManual = false) {
                     return;
                 }
 
-                const result = await ipcRenderer.invoke('send-image-content', {
+                const result = await api.invoke('send-image-content', {
                     data: base64data,
                 });
 
@@ -595,7 +628,7 @@ async function captureManualScreenshot(imageQuality = null) {
                 }
 
                 // Send image with prompt to HTTP API (response streams via IPC events)
-                const result = await ipcRenderer.invoke('send-image-content', {
+                const result = await api.invoke('send-image-content', {
                     data: base64data,
                     prompt: MANUAL_SCREENSHOT_PROMPT,
                 });
@@ -647,7 +680,7 @@ function stopCapture() {
 
     // Stop macOS audio capture if running
     if (isMacOS) {
-        ipcRenderer.invoke('stop-macos-audio').catch(err => {
+        api.invoke('stop-macos-audio').catch(err => {
             console.error('Error stopping macOS audio:', err);
         });
     }
@@ -670,7 +703,7 @@ async function sendTextMessage(text) {
     }
 
     try {
-        const result = await ipcRenderer.invoke('send-text-message', text);
+        const result = await api.invoke('send-text-message', text);
         if (result.success) {
             console.log('Text message sent successfully');
         } else {
@@ -684,7 +717,7 @@ async function sendTextMessage(text) {
 }
 
 // Listen for conversation data from main process and save to storage
-ipcRenderer.on('save-conversation-turn', async (event, data) => {
+api.on('save-conversation-turn', async (data) => {
     try {
         await storage.saveSession(data.sessionId, { conversationHistory: data.fullHistory });
         console.log('Conversation session saved:', data.sessionId);
@@ -694,7 +727,7 @@ ipcRenderer.on('save-conversation-turn', async (event, data) => {
 });
 
 // Listen for session context (profile info) when session starts
-ipcRenderer.on('save-session-context', async (event, data) => {
+api.on('save-session-context', async (data) => {
     try {
         await storage.saveSession(data.sessionId, {
             profile: data.profile,
@@ -707,7 +740,7 @@ ipcRenderer.on('save-session-context', async (event, data) => {
 });
 
 // Listen for screen analysis responses (from ctrl+enter)
-ipcRenderer.on('save-screen-analysis', async (event, data) => {
+api.on('save-screen-analysis', async (data) => {
     try {
         await storage.saveSession(data.sessionId, {
             screenAnalysisHistory: data.fullHistory,
@@ -721,7 +754,7 @@ ipcRenderer.on('save-screen-analysis', async (event, data) => {
 });
 
 // Listen for emergency erase command from main process
-ipcRenderer.on('clear-sensitive-data', async () => {
+api.on('clear-sensitive-data', async () => {
     console.log('Clearing all data...');
     await storage.clearAll();
 });
@@ -805,12 +838,17 @@ const theme = {
 
     current: 'dark',
 
+    // Whether the actual applied theme is derived from 'system' mode
+    isSystemMode: false,
+    _resolvedSystemTheme: null,
+
     get(name) {
         return this.themes[name] || this.themes.dark;
     },
 
     getAll() {
         const names = {
+            system: 'System (Auto)',
             dark: 'Dark',
             light: 'Light',
             midnight: 'Midnight Blue',
@@ -819,11 +857,26 @@ const theme = {
             dracula: 'Dracula',
             abyss: 'Abyss'
         };
-        return Object.keys(this.themes).map(key => ({
+        // Put system first, then the rest
+        const keys = ['system', ...Object.keys(this.themes)];
+        return keys.map(key => ({
             value: key,
             name: names[key] || key,
-            colors: this.themes[key]
+            colors: key === 'system' ? this.themes.dark : this.themes[key]
         }));
+    },
+
+    // Resolve 'system' to actual theme based on OS preference
+    async resolveSystemTheme() {
+        try {
+            const result = await api.invoke('get-native-theme');
+            if (result.success) {
+                return result.data.shouldUseDarkColors ? 'dark' : 'light';
+            }
+        } catch (err) {
+            console.warn('Failed to query native theme:', err);
+        }
+        return 'dark';
     },
 
     hexToRgb(hex) {
@@ -876,6 +929,16 @@ const theme = {
     },
 
     apply(themeName, alpha = 0.8) {
+        // If 'system', resolve to actual theme but track system mode
+        if (themeName === 'system') {
+            this.isSystemMode = true;
+            // Use sync fallback; async resolution handled in load()
+            // Default to dark if we can't determine
+            const resolved = this._resolvedSystemTheme || 'dark';
+            themeName = resolved;
+        } else {
+            this.isSystemMode = false;
+        }
         const colors = this.get(themeName);
         this.current = themeName;
         const root = document.documentElement;
@@ -916,7 +979,14 @@ const theme = {
             const prefs = await storage.getPreferences();
             const themeName = prefs.theme || 'dark';
             const alpha = prefs.backgroundTransparency ?? 0.8;
-            this.apply(themeName, alpha);
+
+            if (themeName === 'system') {
+                this.isSystemMode = true;
+                this._resolvedSystemTheme = await this.resolveSystemTheme();
+                this.apply('system', alpha);
+            } else {
+                this.apply(themeName, alpha);
+            }
             return themeName;
         } catch (err) {
             this.apply('dark');
@@ -926,14 +996,29 @@ const theme = {
 
     async save(themeName) {
         await storage.updatePreference('theme', themeName);
-        this.apply(themeName);
+        if (themeName === 'system') {
+            this._resolvedSystemTheme = await this.resolveSystemTheme();
+        }
+        const prefs = await storage.getPreferences();
+        const alpha = prefs.backgroundTransparency ?? 0.8;
+        this.apply(themeName, alpha);
+    },
+
+    // Called when OS theme changes
+    async handleSystemThemeChange(shouldUseDarkColors) {
+        this._resolvedSystemTheme = shouldUseDarkColors ? 'dark' : 'light';
+        if (this.isSystemMode) {
+            const prefs = await storage.getPreferences();
+            const alpha = prefs.backgroundTransparency ?? 0.8;
+            this.apply('system', alpha);
+        }
     }
 };
 
 // Consolidated assistant object - all functions in one place
 const assistant = {
     // App version
-    getVersion: async () => ipcRenderer.invoke('get-app-version'),
+    getVersion: async () => api.invoke('get-app-version'),
 
     // Element access
     element: () => assistantApp,
@@ -957,16 +1042,22 @@ const assistant = {
 
     // Co-Pilot document operations
     openFileDialog: async () => {
-        return ipcRenderer.invoke('copilot:open-file-dialog');
+        return api.invoke('copilot:open-file-dialog');
     },
     parseDocument: async (filePath) => {
-        return ipcRenderer.invoke('copilot:parse-document', filePath);
+        return api.invoke('copilot:parse-document', filePath);
     },
     generateSummary: async (data) => {
-        return ipcRenderer.invoke('copilot:generate-summary', data);
+        return api.invoke('copilot:generate-summary', data);
     },
     exportNotes: async (data) => {
-        return ipcRenderer.invoke('copilot:export-notes', data);
+        return api.invoke('copilot:export-notes', data);
+    },
+    deleteDocumentEmbeddings: async (docId) => {
+        return api.invoke('copilot:delete-document-embeddings', docId);
+    },
+    getAllEmbeddings: async () => {
+        return api.invoke('copilot:get-all-embeddings');
     },
 
     // Storage API
@@ -992,3 +1083,8 @@ if (document.readyState === 'loading') {
 } else {
     theme.load();
 }
+
+// Listen for OS theme changes
+api.on('native-theme-changed', (shouldUseDarkColors) => {
+    theme.handleSystemThemeChange(shouldUseDarkColors);
+});

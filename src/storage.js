@@ -87,6 +87,10 @@ function getHistoryDir() {
     return path.join(getConfigDir(), 'history');
 }
 
+function getEmbeddingsDir() {
+    return path.join(getConfigDir(), 'embeddings');
+}
+
 function getCoPilotPrepPath() {
     return path.join(getConfigDir(), 'copilot-prep.json');
 }
@@ -148,6 +152,7 @@ function resetConfigDir() {
     // Create fresh directory structure
     fs.mkdirSync(configDir, { recursive: true });
     fs.mkdirSync(getHistoryDir(), { recursive: true });
+    fs.mkdirSync(getEmbeddingsDir(), { recursive: true });
 
     // Initialize with defaults
     writeJsonFile(getConfigPath(), DEFAULT_CONFIG);
@@ -162,10 +167,14 @@ function initializeStorage() {
     if (needsReset()) {
         resetConfigDir();
     } else {
-        // Ensure history directory exists
+        // Ensure history and embeddings directories exist
         const historyDir = getHistoryDir();
         if (!fs.existsSync(historyDir)) {
             fs.mkdirSync(historyDir, { recursive: true });
+        }
+        const embeddingsDir = getEmbeddingsDir();
+        if (!fs.existsSync(embeddingsDir)) {
+            fs.mkdirSync(embeddingsDir, { recursive: true });
         }
     }
 }
@@ -386,7 +395,9 @@ function getAllSessions() {
                     profile: data.profile || null,
                     customPrompt: data.customPrompt || null,
                     hasCopilot: !!data.copilotPrep,
-                    hasSummary: !!data.summary
+                    hasSummary: !!data.summary,
+                    goal: data.copilotPrep?.goal || null,
+                    firstMessage: data.conversationHistory?.[0]?.transcription || null
                 };
             }
             return null;
@@ -445,6 +456,116 @@ function updateCoPilotPrepField(key, value) {
     return writeJsonFile(getCoPilotPrepPath(), prep);
 }
 
+function clearCoPilotPrep() {
+    return writeJsonFile(getCoPilotPrepPath(), DEFAULT_COPILOT_PREP);
+}
+
+// ============ CUSTOM PROFILES ============
+
+function getCustomProfilesPath() {
+    return path.join(getConfigDir(), 'custom-profiles.json');
+}
+
+function getCustomProfiles() {
+    return readJsonFile(getCustomProfilesPath(), []);
+}
+
+function saveCustomProfile(profile) {
+    const profiles = getCustomProfiles();
+    const index = profiles.findIndex(p => p.id === profile.id);
+    if (index >= 0) {
+        profiles[index] = profile;
+    } else {
+        profiles.push(profile);
+    }
+    return writeJsonFile(getCustomProfilesPath(), profiles);
+}
+
+function deleteCustomProfile(profileId) {
+    const profiles = getCustomProfiles();
+    const filtered = profiles.filter(p => p.id !== profileId);
+    return writeJsonFile(getCustomProfilesPath(), filtered);
+}
+
+// ============ EMBEDDINGS ============
+
+function saveEmbeddings(docId, data) {
+    const filePath = path.join(getEmbeddingsDir(), `${docId}.json`);
+    return writeJsonFile(filePath, data);
+}
+
+function getEmbeddings(docId) {
+    const filePath = path.join(getEmbeddingsDir(), `${docId}.json`);
+    return readJsonFile(filePath, null);
+}
+
+function deleteEmbeddings(docId) {
+    const filePath = path.join(getEmbeddingsDir(), `${docId}.json`);
+    try {
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            return true;
+        }
+    } catch (error) {
+        console.error('Error deleting embeddings:', error.message);
+    }
+    return false;
+}
+
+function getAllEmbeddings() {
+    const embeddingsDir = getEmbeddingsDir();
+    try {
+        if (!fs.existsSync(embeddingsDir)) return [];
+
+        const files = fs.readdirSync(embeddingsDir).filter(f => f.endsWith('.json'));
+        return files.map(file => readJsonFile(path.join(embeddingsDir, file), null)).filter(Boolean);
+    } catch (error) {
+        console.error('Error reading embeddings:', error.message);
+        return [];
+    }
+}
+
+function clearAllEmbeddings() {
+    const embeddingsDir = getEmbeddingsDir();
+    try {
+        if (fs.existsSync(embeddingsDir)) {
+            fs.rmSync(embeddingsDir, { recursive: true, force: true });
+            fs.mkdirSync(embeddingsDir, { recursive: true });
+        }
+        return true;
+    } catch (error) {
+        console.error('Error clearing embeddings:', error.message);
+        return false;
+    }
+}
+
+// ============ TEMPLATES ============
+
+function getTemplatesPath() {
+    return path.join(getConfigDir(), 'templates.json');
+}
+
+function getTemplates() {
+    return readJsonFile(getTemplatesPath(), []);
+}
+
+function saveTemplate(template) {
+    const templates = getTemplates();
+    const index = templates.findIndex(t => t.id === template.id);
+    if (index >= 0) {
+        templates[index] = template;
+    } else {
+        templates.push(template);
+    }
+    return writeJsonFile(getTemplatesPath(), templates);
+}
+
+function deleteTemplate(templateId) {
+    const templates = getTemplates();
+    const filtered = templates.filter(t => t.id !== templateId);
+    return writeJsonFile(getTemplatesPath(), filtered);
+}
+
 // ============ CLEAR ALL DATA ============
 
 function clearAllData() {
@@ -495,6 +616,25 @@ module.exports = {
     getCoPilotPrep,
     setCoPilotPrep,
     updateCoPilotPrepField,
+    clearCoPilotPrep,
+
+    // Templates
+    getTemplates,
+    saveTemplate,
+    deleteTemplate,
+
+    // Custom Profiles
+    getCustomProfiles,
+    saveCustomProfile,
+    deleteCustomProfile,
+
+    // Embeddings
+    getEmbeddingsDir,
+    saveEmbeddings,
+    getEmbeddings,
+    deleteEmbeddings,
+    getAllEmbeddings,
+    clearAllEmbeddings,
 
     // Clear all
     clearAllData

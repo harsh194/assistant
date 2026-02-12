@@ -456,9 +456,8 @@ export class OnboardingView extends LitElement {
     }
 
     async handleClose() {
-        if (window.require) {
-            const { ipcRenderer } = window.require('electron');
-            await ipcRenderer.invoke('quit-application');
+        if (window.electronAPI) {
+            await window.electronAPI.invoke('quit-application');
         }
     }
 

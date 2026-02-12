@@ -26,6 +26,48 @@ export class SessionPrepView extends LitElement {
             margin-bottom: 16px;
             padding: 0 16px 12px 16px;
             border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+            padding: 4px 10px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.1s ease;
+        }
+
+        .header-btn:hover {
+            color: var(--text-color);
+            background: var(--hover-background);
+        }
+
+        .header-btn.danger:hover {
+            color: var(--error-color);
+            background: rgba(241, 76, 76, 0.1);
+        }
+
+        .draft-indicator {
+            font-size: 10px;
+            color: var(--success-color);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .draft-indicator.visible {
+            opacity: 1;
         }
 
         .form-grid {
@@ -244,6 +286,27 @@ export class SessionPrepView extends LitElement {
             border-top: 1px solid var(--border-color);
             margin: 4px 0;
         }
+
+        .save-template-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .save-template-row input {
+            flex: 1;
+        }
+
+        .template-saved-msg {
+            font-size: 10px;
+            color: var(--success-color);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .template-saved-msg.visible {
+            opacity: 1;
+        }
     `;
 
     static properties = {
@@ -251,6 +314,10 @@ export class SessionPrepView extends LitElement {
         prepData: { type: Object },
         _topicInput: { state: true },
         _isUploading: { state: true },
+        _uploadStage: { state: true },
+        _draftSaved: { state: true },
+        _templateName: { state: true },
+        _templateSaved: { state: true },
     };
 
     constructor() {
@@ -267,6 +334,12 @@ export class SessionPrepView extends LitElement {
         };
         this._topicInput = '';
         this._isUploading = false;
+        this._uploadStage = null;
+        this._cleanupUploadProgress = null;
+        this._draftSaved = false;
+        this._draftSaveTimer = null;
+        this._templateName = '';
+        this._templateSaved = false;
         this._loadFromStorage();
     }
 
@@ -283,11 +356,41 @@ export class SessionPrepView extends LitElement {
     connectedCallback() {
         super.connectedCallback();
         resizeLayout();
+        if (window.electronAPI) {
+            this._cleanupUploadProgress = window.electronAPI.on('document-upload-progress', (data) => {
+                this._uploadStage = data.stage;
+                if (data.stage === 'done' || data.stage === 'error') {
+                    setTimeout(() => { this._uploadStage = null; }, 2000);
+                }
+            });
+        }
+    }
+
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        if (this._cleanupUploadProgress) {
+            this._cleanupUploadProgress();
+            this._cleanupUploadProgress = null;
+        }
+        if (this._draftSaveTimer) {
+            clearTimeout(this._draftSaveTimer);
+        }
     }
 
     async _saveField(key, value) {
         this.prepData = { ...this.prepData, [key]: value };
         await assistant.storage.updateCoPilotPrep(key, value);
+        this._showDraftSaved();
+    }
+
+    _showDraftSaved() {
+        this._draftSaved = true;
+        if (this._draftSaveTimer) {
+            clearTimeout(this._draftSaveTimer);
+        }
+        this._draftSaveTimer = setTimeout(() => {
+            this._draftSaved = false;
+        }, 1500);
     }
 
     handleInput(key, e) {
@@ -336,6 +439,12 @@ export class SessionPrepView extends LitElement {
     }
 
     _removeDocument(index) {
+        const doc = this.prepData.referenceDocuments[index];
+        if (doc && doc.docId) {
+            assistant.deleteDocumentEmbeddings(doc.docId).catch(err =>
+                console.warn('Failed to delete embeddings:', err)
+            );
+        }
         const newDocs = this.prepData.referenceDocuments.filter((_, i) => i !== index);
         this._saveField('referenceDocuments', newDocs);
     }
@@ -350,12 +459,61 @@ export class SessionPrepView extends LitElement {
         this.onStartSession(this.prepData);
     }
 
+    async _clearDraft() {
+        await assistant.storage.clearCoPilotPrep();
+        this.prepData = {
+            goal: '',
+            desiredOutcome: '',
+            successCriteria: '',
+            decisionOwner: '',
+            keyTopics: [],
+            referenceDocuments: [],
+            customNotes: '',
+        };
+        this.requestUpdate();
+    }
+
+    async _saveAsTemplate() {
+        const name = this._templateName.trim();
+        if (!name) return;
+
+        const template = {
+            id: String(Date.now()),
+            name,
+            profile: null,
+            prepData: {
+                goal: this.prepData.goal,
+                desiredOutcome: this.prepData.desiredOutcome,
+                successCriteria: this.prepData.successCriteria,
+                decisionOwner: this.prepData.decisionOwner,
+                keyTopics: this.prepData.keyTopics.map(t => ({ text: t.text, covered: false })),
+                customNotes: this.prepData.customNotes,
+            },
+            createdAt: Date.now(),
+        };
+
+        await assistant.storage.saveTemplate(template);
+        this._templateName = '';
+        this._templateSaved = true;
+        setTimeout(() => { this._templateSaved = false; }, 2000);
+    }
+
     render() {
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
         const shortcut = isMac ? 'Cmd+Enter' : 'Ctrl+Enter';
+        const hasContent = !!(this.prepData.goal || this.prepData.desiredOutcome
+            || this.prepData.keyTopics.length > 0 || this.prepData.customNotes);
 
         return html`
-            <div class="content-header">Session Preparation</div>
+            <div class="content-header">
+                <span>Session Preparation</span>
+                <div class="header-actions">
+                    <span class="draft-indicator ${this._draftSaved ? 'visible' : ''}">Saved</span>
+                    ${hasContent ? html`
+                        <button class="header-btn danger" @click=${() => this._clearDraft()}>Clear</button>
+                    ` : ''}
+                </div>
+            </div>
             <div class="form-grid">
                 <div class="form-group">
                     <label class="form-label">Goal</label>
@@ -449,7 +607,11 @@ export class SessionPrepView extends LitElement {
                         class="upload-button ${this._isUploading ? 'loading' : ''}"
                         @click=${() => this._handleUploadClick()}
                     >
-                        ${this._isUploading ? 'Processing...' : '+ Upload Document'}
+                        ${this._isUploading
+                            ? (this._uploadStage === 'embedding' ? 'Generating embeddings...'
+                                : this._uploadStage === 'parsing' ? 'Parsing document...'
+                                : 'Processing...')
+                            : '+ Upload Document'}
                     </button>
                 </div>
 
@@ -465,6 +627,25 @@ export class SessionPrepView extends LitElement {
                         style="min-height: 60px;"
                     ></textarea>
                 </div>
+
+                ${hasContent ? html`
+                    <hr class="section-divider" />
+                    <div class="form-group">
+                        <label class="form-label">Save as Template</label>
+                        <div class="save-template-row">
+                            <input
+                                type="text"
+                                class="form-control"
+                                placeholder="Template name..."
+                                .value=${this._templateName}
+                                @input=${e => { this._templateName = e.target.value; }}
+                                @keydown=${e => { if (e.key === 'Enter') { e.preventDefault(); this._saveAsTemplate(); } }}
+                            />
+                            <button class="add-button" @click=${() => this._saveAsTemplate()}>Save</button>
+                        </div>
+                        <span class="template-saved-msg ${this._templateSaved ? 'visible' : ''}">Template saved</span>
+                    </div>
+                ` : ''}
 
                 <button class="start-button" @click=${() => this._handleStartSession()}>
                     Start Session <span class="shortcut-hint">${shortcut}</span>

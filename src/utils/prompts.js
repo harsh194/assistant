@@ -207,7 +207,7 @@ Provide direct exam answers in **markdown format**. Include the question text, t
 
 const { buildCoPilotContext, buildCoPilotInstructions } = require('./copilotPrompts');
 
-function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled = true, copilotPrep = null) {
+function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled = true, copilotPrep = null, hasEmbeddings = false) {
     const sections = [promptParts.intro, '\n\n', promptParts.formatRequirements];
 
     // Only add search usage section if Google Search is enabled
@@ -219,7 +219,7 @@ function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled =
 
     // Add co-pilot context and instructions if prep data is provided
     if (copilotPrep) {
-        const copilotContext = buildCoPilotContext(copilotPrep);
+        const copilotContext = buildCoPilotContext(copilotPrep, hasEmbeddings);
         const copilotInstructions = buildCoPilotInstructions(copilotPrep.profile || 'interview');
         sections.push('\n\n', copilotContext, '\n\n', copilotInstructions);
     }
@@ -229,9 +229,28 @@ function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled =
     return sections.join('');
 }
 
-function getSystemPrompt(profile, customPrompt = '', googleSearchEnabled = true, copilotPrep = null) {
-    const promptParts = profilePrompts[profile] || profilePrompts.interview;
-    return buildSystemPrompt(promptParts, customPrompt, googleSearchEnabled, copilotPrep);
+function buildCustomProfileParts(customProfile) {
+    return {
+        intro: customProfile.systemPrompt || 'You are a helpful assistant. Provide clear, concise responses.',
+        formatRequirements: `**RESPONSE FORMAT REQUIREMENTS:**
+- Use **markdown formatting** for better readability
+- Use **bold** for key points and emphasis
+- Keep responses clear and professional`,
+        searchUsage: '',
+        content: '',
+        outputInstructions: `**OUTPUT INSTRUCTIONS:**
+Provide direct, professional responses in **markdown format**.`,
+    };
+}
+
+function getSystemPrompt(profile, customPrompt = '', googleSearchEnabled = true, copilotPrep = null, customProfileData = null, hasEmbeddings = false) {
+    let promptParts;
+    if (customProfileData) {
+        promptParts = buildCustomProfileParts(customProfileData);
+    } else {
+        promptParts = profilePrompts[profile] || profilePrompts.interview;
+    }
+    return buildSystemPrompt(promptParts, customPrompt, googleSearchEnabled, copilotPrep, hasEmbeddings);
 }
 
 module.exports = {

@@ -7,24 +7,50 @@ export class MainView extends LitElement {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             cursor: default;
             user-select: none;
+            box-sizing: border-box;
         }
 
-        .welcome {
-            font-size: 20px;
-            margin-bottom: 6px;
-            font-weight: 500;
-            color: var(--text-color);
-            margin-top: auto;
-        }
-
-        .input-group {
+        :host {
+            height: 100%;
             display: flex;
-            gap: 10px;
-            margin-bottom: 16px;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
         }
 
-        .input-group input {
-            flex: 1;
+        .container {
+            width: 100%;
+            max-width: 380px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            padding: 0 16px;
+        }
+
+        .heading {
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 6px;
+            text-align: center;
+            letter-spacing: -0.3px;
+        }
+
+        .subtitle {
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-bottom: 28px;
+            line-height: 1.4;
+        }
+
+        .api-key-label {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         input {
@@ -33,9 +59,9 @@ export class MainView extends LitElement {
             border: 1px solid var(--border-color);
             padding: 10px 12px;
             width: 100%;
-            border-radius: 3px;
+            border-radius: var(--border-radius);
             font-size: 13px;
-            transition: border-color 0.1s ease;
+            transition: border-color 0.15s ease;
         }
 
         input:focus {
@@ -47,7 +73,6 @@ export class MainView extends LitElement {
             color: var(--placeholder-color);
         }
 
-        /* Red blink animation for empty API key */
         input.api-key-error {
             animation: blink-red 0.6s ease-in-out;
             border-color: var(--error-color);
@@ -63,130 +88,195 @@ export class MainView extends LitElement {
             }
         }
 
-        .start-button {
-            background: var(--start-button-background);
-            color: var(--start-button-color);
-            border: none;
-            padding: 10px 16px;
-            border-radius: 3px;
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 24px;
+        }
+
+        .action-card {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            text-align: left;
+            padding: 14px 16px;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            width: 100%;
+        }
+
+        .action-card .action-title {
             font-size: 13px;
-            font-weight: 500;
-            white-space: nowrap;
+            font-weight: 600;
+            margin-bottom: 3px;
             display: flex;
             align-items: center;
             gap: 8px;
-            transition: background 0.1s ease;
         }
 
-        .start-button:hover {
+        .action-card .action-desc {
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        .action-card.primary {
+            background: var(--start-button-background);
+            border: none;
+        }
+
+        .action-card.primary .action-title {
+            color: var(--start-button-color);
+        }
+
+        .action-card.primary .action-desc {
+            color: var(--start-button-color);
+            opacity: 0.6;
+        }
+
+        .action-card.primary:hover {
             background: var(--start-button-hover-background);
         }
 
-        .prepare-button {
-            background: transparent;
-            color: var(--text-color);
-            border: 1px solid var(--border-color);
-            padding: 10px 16px;
-            border-radius: 3px;
-            font-size: 13px;
-            font-weight: 500;
-            white-space: nowrap;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: background 0.1s ease;
-        }
-
-        .prepare-button:hover {
-            background: var(--hover-background);
-        }
-
-        .start-button.initializing {
+        .action-card.primary.initializing {
             opacity: 0.5;
             cursor: not-allowed;
         }
 
-        .start-button.initializing:hover {
+        .action-card.primary.initializing:hover {
             background: var(--start-button-background);
         }
 
-        .shortcut-hint {
-            font-size: 11px;
-            color: var(--text-muted);
-            font-family: 'SF Mono', Monaco, monospace;
+        .action-card.secondary {
+            background: transparent;
+            border: 1px solid var(--border-color);
         }
 
-        .description {
+        .action-card.secondary .action-title {
+            color: var(--text-color);
+        }
+
+        .action-card.secondary .action-desc {
             color: var(--text-secondary);
-            font-size: 13px;
-            margin-bottom: 20px;
-            line-height: 1.5;
         }
 
-        .link {
-            color: var(--text-color);
-            text-decoration: underline;
-            cursor: pointer;
-            text-underline-offset: 2px;
+        .action-card.secondary:hover {
+            background: var(--hover-background);
+            border-color: var(--border-default);
         }
 
-        .link:hover {
-            color: var(--text-color);
+        .draft-badge {
+            font-size: 9px;
+            font-weight: 500;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: var(--btn-primary-bg);
+            color: var(--btn-primary-text);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
         }
 
-        :host {
-            height: 100%;
-            display: flex;
-            flex-direction: column;
+        .template-section {
+            margin-top: 6px;
+        }
+
+        .template-select {
             width: 100%;
-            max-width: 480px;
+            background: var(--input-background);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px 10px;
+            border-radius: var(--border-radius);
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .template-select:focus {
+            outline: none;
+            border-color: var(--border-default);
+        }
+
+        .shortcut-hint {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            text-align: center;
+            margin-top: 16px;
         }
     `;
 
     static properties = {
         onStart: { type: Function },
         onPrepare: { type: Function },
+        onUseTemplate: { type: Function },
         onAPIKeyHelp: { type: Function },
         isInitializing: { type: Boolean },
         onLayoutModeChange: { type: Function },
         showApiKeyError: { type: Boolean },
+        _hasDraft: { state: true },
+        _templates: { state: true },
     };
 
     constructor() {
         super();
         this.onStart = () => { };
         this.onPrepare = () => { };
+        this.onUseTemplate = () => { };
         this.onAPIKeyHelp = () => { };
         this.isInitializing = false;
         this.onLayoutModeChange = () => { };
         this.showApiKeyError = false;
         this.boundKeydownHandler = this.handleKeydown.bind(this);
         this.apiKey = '';
+        this._hasDraft = false;
+        this._templates = [];
         this._loadApiKey();
     }
 
     async _loadApiKey() {
-        const apiKey = await assistant.storage.getApiKey();
+        this.apiKey = await assistant.storage.getApiKey();
         this.requestUpdate();
+    }
+
+    async _checkDraft() {
+        try {
+            const draft = await assistant.storage.getCoPilotPrep();
+            this._hasDraft = !!(draft.goal || (draft.keyTopics && draft.keyTopics.length > 0)
+                || draft.desiredOutcome || draft.customNotes);
+        } catch (error) {
+            this._hasDraft = false;
+        }
+    }
+
+    async _loadTemplates() {
+        try {
+            this._templates = await assistant.storage.getTemplates();
+        } catch (error) {
+            this._templates = [];
+        }
     }
 
     connectedCallback() {
         super.connectedCallback();
-        window.electron?.ipcRenderer?.on('session-initializing', (event, isInitializing) => {
-            this.isInitializing = isInitializing;
-        });
+        if (window.electronAPI) {
+            this._cleanupInitializing = window.electronAPI.on('session-initializing', (isInitializing) => {
+                this.isInitializing = isInitializing;
+            });
+        }
 
-        // Add keyboard event listener for Ctrl+Enter (or Cmd+Enter on Mac)
         document.addEventListener('keydown', this.boundKeydownHandler);
-
-        // Resize window for this view
         resizeLayout();
+        this._checkDraft();
+        this._loadTemplates();
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        window.electron?.ipcRenderer?.removeAllListeners('session-initializing');
-        // Remove keyboard event listener
+        if (this._cleanupInitializing) {
+            this._cleanupInitializing();
+            this._cleanupInitializing = null;
+        }
         document.removeEventListener('keydown', this.boundKeydownHandler);
     }
 
@@ -203,7 +293,6 @@ export class MainView extends LitElement {
     async handleInput(e) {
         this.apiKey = e.target.value;
         await assistant.storage.setApiKey(e.target.value);
-        // Clear error state when user starts typing
         if (this.showApiKeyError) {
             this.showApiKeyError = false;
         }
@@ -220,41 +309,80 @@ export class MainView extends LitElement {
         this.onAPIKeyHelp();
     }
 
-    // Method to trigger the red blink animation
     triggerApiKeyError() {
         this.showApiKeyError = true;
-        // Remove the error class after 1 second
         setTimeout(() => {
             this.showApiKeyError = false;
         }, 1000);
     }
 
-    getStartButtonText() {
-        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-        const shortcut = isMac ? 'Cmd+Enter' : 'Ctrl+Enter';
-        return html`Start <span class="shortcut-hint">${shortcut}</span>`;
+    _handleTemplateSelect(e) {
+        const templateId = e.target.value;
+        if (!templateId) return;
+
+        const template = this._templates.find(t => t.id === templateId);
+        if (template) {
+            this.onUseTemplate(template);
+        }
+        // Reset select to placeholder
+        e.target.value = '';
     }
 
     render() {
-        return html`
-            <div class="welcome">Welcome</div>
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const shortcut = isMac ? 'Cmd + Enter' : 'Ctrl + Enter';
 
-            <div class="input-group">
+        return html`
+            <div class="container">
+                <div class="heading">Welcome to Assistant</div>
+                <div class="subtitle">Your AI-powered desktop companion</div>
+
+                <div class="api-key-label">API Key</div>
                 <input
                     type="password"
-                    placeholder="Enter your Gemini API Key"
+                    placeholder="Enter your Gemini API key"
                     .value=${this.apiKey}
                     @input=${this.handleInput}
                     class="${this.showApiKeyError ? 'api-key-error' : ''}"
                 />
-                <button @click=${this.handleStartClick} class="start-button ${this.isInitializing ? 'initializing' : ''}">
-                    ${this.getStartButtonText()}
-                </button>
-            </div>
 
-            <button @click=${() => this.onPrepare()} class="prepare-button">
-                Prepare Session
-            </button>
+                <div class="actions">
+                    <button
+                        @click=${this.handleStartClick}
+                        class="action-card primary ${this.isInitializing ? 'initializing' : ''}"
+                    >
+                        <span class="action-title">Start Session</span>
+                        <span class="action-desc">Jump straight into a free conversation</span>
+                    </button>
+
+                    <button
+                        @click=${() => this.onPrepare()}
+                        class="action-card secondary"
+                    >
+                        <span class="action-title">
+                            Prepare Session
+                            ${this._hasDraft ? html`<span class="draft-badge">Draft</span>` : ''}
+                        </span>
+                        <span class="action-desc">${this._hasDraft
+                            ? 'Continue your saved session preparation'
+                            : 'Define goals, upload context, and start a guided session'
+                        }</span>
+                    </button>
+
+                    ${this._templates.length > 0 ? html`
+                        <div class="template-section">
+                            <select class="template-select" @change=${this._handleTemplateSelect}>
+                                <option value="">Use a template...</option>
+                                ${this._templates.map(t => html`
+                                    <option value="${t.id}">${t.name}</option>
+                                `)}
+                            </select>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="shortcut-hint">${shortcut} to start</div>
+            </div>
         `;
     }
 }

@@ -5,7 +5,9 @@
 Electron-based AI assistant using Google Gemini API. Features include:
 - Real-time AI conversations
 - Co-Pilot mode for structured, goal-driven sessions
-- Document ingestion via Gemini API OCR
+- RAG (Retrieval-Augmented Generation) for dynamic document context injection
+- Document ingestion via Gemini API OCR with chunking and embedding
+- Custom AI profiles (user-created personas with custom system prompts)
 - Post-session summary generation and .docx export
 - Session history management
 - Customizable keybinds
@@ -60,19 +62,24 @@ src/
 │   ├── app/
 │   │   ├── AssistantApp.js   # Main app component (state, routing, co-pilot orchestration)
 │   │   └── AppHeader.js      # Header component
+│   ├── ui/
+│   │   └── SkeletonLoader.js # Loading skeleton with shimmer animation
 │   └── views/
-│       ├── MainView.js           # Main view (Start + Prepare buttons)
+│       ├── MainView.js           # Main view (Start + Prepare + Templates)
 │       ├── AssistantView.js      # AI response display (silent notes parsing)
-│       ├── SessionPrepView.js    # Co-Pilot pre-session setup form
+│       ├── SessionPrepView.js    # Co-Pilot pre-session setup form (auto-save drafts, save as template)
 │       ├── SessionSummaryView.js # Post-session summary, notes view/export
 │       ├── OnboardingView.js     # Setup wizard
-│       ├── HistoryView.js        # Session history (with co-pilot notes tab)
-│       ├── CustomizeView.js      # Settings
+│       ├── HistoryView.js        # Session history (search, filter by profile/date/co-pilot)
+│       ├── CustomizeView.js      # Settings (includes custom profiles management)
 │       └── HelpView.js           # Help/docs
 └── utils/
-    ├── gemini.js         # Gemini API integration (live session + HTTP API)
-    ├── prompts.js        # AI prompt templates (profile-based)
+    ├── gemini.js         # Gemini API integration (live session + HTTP API + RAG)
+    ├── prompts.js        # AI prompt templates (profile-based, RAG-aware)
     ├── copilotPrompts.js # Co-Pilot context and behavioral instructions
+    ├── chunker.js        # Text chunking for RAG (fixed-size overlapping chunks)
+    ├── embeddings.js     # Vector embeddings via Gemini text-embedding-004 model
+    ├── retrieval.js      # RAG engine (dynamic context injection during sessions)
     ├── notesParser.js    # Parse [NOTES], [REFOCUS], [ADVANCE] markers from AI
     ├── notesExporter.js  # Export session notes to .docx
     ├── documentParser.js # Document text extraction (plain text + Gemini OCR)
@@ -97,15 +104,36 @@ src/
 - Keybinds: Keyboard shortcuts
 - Sessions: Chat history (with co-pilot prep, notes, summary)
 - CoPilotPrep: Structured session preparation data
+- Embeddings: Vector embeddings for RAG (`embeddings/` directory, one JSON file per document)
+- CustomProfiles: User-created AI profiles (`custom-profiles.json`)
+- Templates: Reusable session preparation templates (`templates.json`)
 
 ### Co-Pilot Data Flow
 
 ```
 SessionPrepView -> AssistantApp.handleStartSession(prepData)
-  -> renderer.initializeGemini(profile, language, copilotPrep)
+  -> renderer.initializeGemini(profile, language, copilotPrep, customProfileData)
   -> IPC 'initialize-gemini' -> gemini.initializeGeminiSession(..., copilotPrep)
-  -> prompts.getSystemPrompt(..., copilotPrep)
-  -> copilotPrompts.buildCoPilotContext() + buildCoPilotInstructions()
+  -> prompts.getSystemPrompt(..., copilotPrep, hasEmbeddings, customProfileData)
+  -> copilotPrompts.buildCoPilotContext(hasEmbeddings) + buildCoPilotInstructions()
+```
+
+### RAG (Retrieval-Augmented Generation) Flow
+
+```
+Document Upload:
+  copilot:open-file-dialog -> parse document -> chunkText() -> generateEmbeddings()
+  -> storage.saveEmbeddings(docId, data) -> document-upload-progress events
+
+During Session (RAG Mode):
+  RetrievalEngine initialized with stored embeddings
+  -> On each AI response: builds query from last 3 turns
+  -> Finds top 5 relevant chunks via cosine similarity
+  -> Injects as [REFERENCE CONTEXT] blocks via sendRealtimeInput()
+  -> 20-second cooldown between retrievals
+
+Fallback Mode (no embeddings):
+  Full document text injected inline in system prompt
 ```
 
 ### Co-Pilot Notes Flow
@@ -120,12 +148,28 @@ SessionPrepView -> AssistantApp.handleStartSession(prepData)
 
 **Storage:**
 - `storage:get-copilot-prep`, `storage:set-copilot-prep`, `storage:update-copilot-prep`
+- `storage:get-custom-profiles` - Get all custom profiles
+- `storage:save-custom-profile` - Save or update a custom profile
+- `storage:delete-custom-profile` - Delete a custom profile
+- `storage:get-templates` - Get all session templates
+- `storage:save-template` - Save or update a template
+- `storage:delete-template` - Delete a template
+- `storage:clear-copilot-prep` - Reset co-pilot prep to defaults
 
 **Co-Pilot:**
-- `copilot:open-file-dialog` - File picker + text extraction
+- `copilot:open-file-dialog` - File picker + text extraction + chunking + embedding
 - `copilot:parse-document` - Parse a file at a given path
 - `copilot:generate-summary` - Generate session summary via Gemini HTTP API
 - `copilot:export-notes` - Export notes + summary to .docx
+- `copilot:delete-document-embeddings` - Delete embeddings for a document
+- `copilot:get-all-embeddings` - Get all stored embeddings
+
+**Theme:**
+- `get-native-theme` - Query OS dark/light mode preference
+
+**Events (Main -> Renderer):**
+- `document-upload-progress` - Progress updates during document upload (stages: parsing, embedding, done, error)
+- `native-theme-changed` - OS theme changed (boolean: shouldUseDarkColors)
 
 ## Available Commands
 

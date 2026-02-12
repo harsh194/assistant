@@ -2,12 +2,14 @@ if (require('electron-squirrel-startup')) {
     process.exit(0);
 }
 
-const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, dialog, nativeTheme } = require('electron');
 const path = require('path');
 const { createWindow, updateGlobalShortcuts } = require('./utils/window');
 const { setupGeminiIpcHandlers, stopMacOSAudioCapture, sendToRenderer, generateSessionSummary } = require('./utils/gemini');
 const { parseDocument, getFileDialogFilters } = require('./utils/documentParser');
 const { exportNotesToDocx } = require('./utils/notesExporter');
+const { chunkText } = require('./utils/chunker');
+const { generateEmbeddings } = require('./utils/embeddings');
 const storage = require('./storage');
 
 const geminiSessionRef = { current: null };
@@ -26,6 +28,13 @@ app.whenReady().then(async () => {
     setupGeminiIpcHandlers(geminiSessionRef);
     setupStorageIpcHandlers();
     setupGeneralIpcHandlers();
+
+    // System theme detection - notify renderer when OS theme changes
+    nativeTheme.on('updated', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('native-theme-changed', nativeTheme.shouldUseDarkColors);
+        }
+    });
 });
 
 app.on('window-all-closed', () => {
@@ -254,6 +263,76 @@ function setupStorageIpcHandlers() {
         }
     });
 
+    ipcMain.handle('storage:clear-copilot-prep', async () => {
+        try {
+            storage.clearCoPilotPrep();
+            return { success: true };
+        } catch (error) {
+            console.error('Error clearing co-pilot prep:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // ============ TEMPLATES ============
+    ipcMain.handle('storage:get-templates', async () => {
+        try {
+            return { success: true, data: storage.getTemplates() };
+        } catch (error) {
+            console.error('Error getting templates:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('storage:save-template', async (event, template) => {
+        try {
+            storage.saveTemplate(template);
+            return { success: true };
+        } catch (error) {
+            console.error('Error saving template:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('storage:delete-template', async (event, templateId) => {
+        try {
+            storage.deleteTemplate(templateId);
+            return { success: true };
+        } catch (error) {
+            console.error('Error deleting template:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // ============ CUSTOM PROFILES ============
+    ipcMain.handle('storage:get-custom-profiles', async () => {
+        try {
+            return { success: true, data: storage.getCustomProfiles() };
+        } catch (error) {
+            console.error('Error getting custom profiles:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('storage:save-custom-profile', async (event, profile) => {
+        try {
+            storage.saveCustomProfile(profile);
+            return { success: true };
+        } catch (error) {
+            console.error('Error saving custom profile:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('storage:delete-custom-profile', async (event, profileId) => {
+        try {
+            storage.deleteCustomProfile(profileId);
+            return { success: true };
+        } catch (error) {
+            console.error('Error deleting custom profile:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
     // ============ CLEAR ALL ============
     ipcMain.handle('storage:clear-all', async () => {
         try {
@@ -269,6 +348,10 @@ function setupStorageIpcHandlers() {
 function setupGeneralIpcHandlers() {
     ipcMain.handle('get-app-version', async () => {
         return app.getVersion();
+    });
+
+    ipcMain.handle('get-native-theme', async () => {
+        return { success: true, data: { shouldUseDarkColors: nativeTheme.shouldUseDarkColors } };
     });
 
     ipcMain.handle('quit-application', async event => {
@@ -322,10 +405,49 @@ function setupGeneralIpcHandlers() {
             const fs = require('fs');
             const stats = fs.statSync(filePath);
 
+            // Parse document
+            if (mainWindow) mainWindow.webContents.send('document-upload-progress', { stage: 'parsing' });
             const parsed = await parseDocument(filePath);
             if (!parsed.success) {
                 return { success: false, error: parsed.error };
             }
+
+            // Generate docId for embedding storage
+            const sanitizedName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+            const docId = `${Date.now()}-${sanitizedName}`;
+
+            // Chunk and embed in background (non-blocking for the return value)
+            let embeddingSuccess = false;
+            try {
+                if (mainWindow) mainWindow.webContents.send('document-upload-progress', { stage: 'embedding' });
+                const apiKey = storage.getApiKey();
+                if (apiKey && parsed.text.length > 0) {
+                    const chunks = chunkText(parsed.text, docId);
+                    if (chunks.length > 0) {
+                        const chunkTexts = chunks.map(c => c.text);
+                        const embeddings = await generateEmbeddings(apiKey, chunkTexts);
+
+                        // Attach embeddings to chunks
+                        const embeddedChunks = chunks.map((chunk, i) => ({
+                            ...chunk,
+                            embedding: embeddings[i] || null,
+                        }));
+
+                        storage.saveEmbeddings(docId, {
+                            docId,
+                            docName: fileName,
+                            chunks: embeddedChunks,
+                            createdAt: Date.now(),
+                        });
+                        embeddingSuccess = true;
+                        console.log(`Embedded ${embeddedChunks.length} chunks for ${fileName}`);
+                    }
+                }
+            } catch (embError) {
+                console.warn('Embedding generation failed (document still usable):', embError.message);
+            }
+
+            if (mainWindow) mainWindow.webContents.send('document-upload-progress', { stage: 'done' });
 
             return {
                 success: true,
@@ -335,10 +457,13 @@ function setupGeneralIpcHandlers() {
                     extractedText: parsed.text,
                     size: stats.size,
                     mimeType: path.extname(filePath).toLowerCase(),
+                    docId,
+                    hasEmbeddings: embeddingSuccess,
                 }
             };
         } catch (error) {
             console.error('Error opening file dialog:', error);
+            if (mainWindow) mainWindow.webContents.send('document-upload-progress', { stage: 'error' });
             return { success: false, error: error.message };
         }
     });
@@ -366,6 +491,26 @@ function setupGeneralIpcHandlers() {
             };
         } catch (error) {
             console.error('Error parsing document:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('copilot:delete-document-embeddings', async (event, docId) => {
+        try {
+            const success = storage.deleteEmbeddings(docId);
+            return { success };
+        } catch (error) {
+            console.error('Error deleting embeddings:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('copilot:get-all-embeddings', async () => {
+        try {
+            const embeddings = storage.getAllEmbeddings();
+            return { success: true, data: embeddings };
+        } catch (error) {
+            console.error('Error getting embeddings:', error);
             return { success: false, error: error.message };
         }
     });

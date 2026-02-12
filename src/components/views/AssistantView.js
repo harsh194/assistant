@@ -17,7 +17,7 @@ export class AssistantView extends LitElement {
         }
 
         .response-container {
-            height: calc(100% - 50px);
+            height: 100%;
             overflow-y: auto;
             font-size: var(--response-font-size, 16px);
             line-height: 1.6;
@@ -248,75 +248,6 @@ export class AssistantView extends LitElement {
             flex-shrink: 0;
         }
 
-        .screen-answer-btn .usage-count {
-            font-size: 11px;
-            opacity: 0.7;
-            font-family: 'SF Mono', Monaco, monospace;
-        }
-
-        .screen-answer-btn-wrapper {
-            position: relative;
-        }
-
-        .screen-answer-btn-wrapper .tooltip {
-            position: absolute;
-            bottom: 100%;
-            right: 0;
-            margin-bottom: 8px;
-            background: var(--tooltip-bg, #1a1a1a);
-            color: var(--tooltip-text, #ffffff);
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 11px;
-            white-space: nowrap;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.15s ease, visibility 0.15s ease;
-            pointer-events: none;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            z-index: 100;
-        }
-
-        .screen-answer-btn-wrapper .tooltip::after {
-            content: '';
-            position: absolute;
-            top: 100%;
-            right: 16px;
-            border: 6px solid transparent;
-            border-top-color: var(--tooltip-bg, #1a1a1a);
-        }
-
-        .screen-answer-btn-wrapper:hover .tooltip {
-            opacity: 1;
-            visibility: visible;
-        }
-
-        .tooltip-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 4px;
-        }
-
-        .tooltip-row:last-child {
-            margin-bottom: 0;
-        }
-
-        .tooltip-label {
-            opacity: 0.7;
-        }
-
-        .tooltip-value {
-            font-family: 'SF Mono', Monaco, monospace;
-        }
-
-        .tooltip-note {
-            margin-top: 6px;
-            padding-top: 6px;
-            border-top: 1px solid rgba(255,255,255,0.1);
-            opacity: 0.5;
-            font-size: 10px;
-        }
 
         .screen-answer-btn:disabled {
             opacity: 0.5;
@@ -335,6 +266,36 @@ export class AssistantView extends LitElement {
             opacity: 0.5;
             pointer-events: none;
         }
+
+        .response-wrapper {
+            position: relative;
+            height: calc(100% - 50px);
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            padding: 4px 8px;
+            font-size: 11px;
+            color: var(--text-muted);
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            z-index: 10;
+        }
+
+        .response-wrapper:hover .copy-btn {
+            opacity: 1;
+        }
+
+        .copy-btn:hover {
+            color: var(--text-color);
+            background: var(--hover-background);
+        }
     `;
 
     static properties = {
@@ -343,13 +304,12 @@ export class AssistantView extends LitElement {
         selectedProfile: { type: String },
         onSendText: { type: Function },
         shouldAnimateResponse: { type: Boolean },
-        flashCount: { type: Number },
-        flashLiteCount: { type: Number },
         requestState: { type: String },
         requestStartTime: { type: Number },
         elapsedTime: { type: Number },
         copilotActive: { type: Boolean },
         copilotPrep: { type: Object },
+        _copyFeedback: { state: true },
     };
 
     constructor() {
@@ -358,14 +318,13 @@ export class AssistantView extends LitElement {
         this.currentResponseIndex = -1;
         this.selectedProfile = 'interview';
         this.onSendText = () => { };
-        this.flashCount = 0;
-        this.flashLiteCount = 0;
         this.requestState = RequestState.IDLE;
         this.requestStartTime = null;
         this.elapsedTime = 0;
         this._elapsedTimer = null;
         this.copilotActive = false;
         this.copilotPrep = null;
+        this._copyFeedback = false;
         this._sessionNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
         this._lastParsedResponse = '';
     }
@@ -494,75 +453,54 @@ export class AssistantView extends LitElement {
     connectedCallback() {
         super.connectedCallback();
 
-        // Load limits on mount
-        this.loadLimits();
-
         // Set up IPC listeners for keyboard shortcuts
-        if (window.require) {
-            const { ipcRenderer } = window.require('electron');
+        if (window.electronAPI) {
+            this._cleanups = [];
 
-            this.handlePreviousResponse = () => {
-                console.log('Received navigate-previous-response message');
+            this._cleanups.push(window.electronAPI.on('navigate-previous-response', () => {
                 this.navigateToPreviousResponse();
-            };
+            }));
 
-            this.handleNextResponse = () => {
-                console.log('Received navigate-next-response message');
+            this._cleanups.push(window.electronAPI.on('navigate-next-response', () => {
                 this.navigateToNextResponse();
-            };
+            }));
 
-            this.handleScrollUp = () => {
-                console.log('Received scroll-response-up message');
+            this._cleanups.push(window.electronAPI.on('scroll-response-up', () => {
                 this.scrollResponseUp();
-            };
+            }));
 
-            this.handleScrollDown = () => {
-                console.log('Received scroll-response-down message');
+            this._cleanups.push(window.electronAPI.on('scroll-response-down', () => {
                 this.scrollResponseDown();
-            };
+            }));
 
-            // Request state handlers
-            this.handleNewResponse = () => {
+            this._cleanups.push(window.electronAPI.on('new-response', () => {
                 this._setRequestState(RequestState.STREAMING);
-            };
+            }));
 
-            this.handleResponseComplete = () => {
+            this._cleanups.push(window.electronAPI.on('response-complete', () => {
                 this._setRequestState(RequestState.DONE);
                 setTimeout(() => this._setRequestState(RequestState.IDLE), 500);
-            };
+            }));
 
-            this.handleRequestCancelled = () => {
+            this._cleanups.push(window.electronAPI.on('request-cancelled', () => {
                 this._setRequestState(RequestState.CANCELLED);
                 setTimeout(() => this._setRequestState(RequestState.IDLE), 1500);
-            };
+            }));
 
-            // Fallback: listen for status updates that indicate completion
-            this.handleStatusUpdate = (event, status) => {
+            this._cleanups.push(window.electronAPI.on('update-status', (status) => {
                 if (typeof status === 'string') {
                     const lowerStatus = status.toLowerCase();
-                    // Only reset to IDLE from STREAMING state (response was received and completed)
-                    // Don't reset from THINKING - we might still be waiting for a response
                     if (lowerStatus.includes('listening') || lowerStatus.includes('ready')) {
                         if (this.requestState === RequestState.STREAMING) {
                             this._setRequestState(RequestState.IDLE);
                         }
                     }
-                    // If status indicates error, set ERROR state
                     if (lowerStatus.includes('error')) {
                         this._setRequestState(RequestState.ERROR);
                         setTimeout(() => this._setRequestState(RequestState.IDLE), 2000);
                     }
                 }
-            };
-
-            ipcRenderer.on('navigate-previous-response', this.handlePreviousResponse);
-            ipcRenderer.on('navigate-next-response', this.handleNextResponse);
-            ipcRenderer.on('scroll-response-up', this.handleScrollUp);
-            ipcRenderer.on('scroll-response-down', this.handleScrollDown);
-            ipcRenderer.on('new-response', this.handleNewResponse);
-            ipcRenderer.on('response-complete', this.handleResponseComplete);
-            ipcRenderer.on('request-cancelled', this.handleRequestCancelled);
-            ipcRenderer.on('update-status', this.handleStatusUpdate);
+            }));
         }
     }
 
@@ -576,32 +514,9 @@ export class AssistantView extends LitElement {
         }
 
         // Clean up IPC listeners
-        if (window.require) {
-            const { ipcRenderer } = window.require('electron');
-            if (this.handlePreviousResponse) {
-                ipcRenderer.removeListener('navigate-previous-response', this.handlePreviousResponse);
-            }
-            if (this.handleNextResponse) {
-                ipcRenderer.removeListener('navigate-next-response', this.handleNextResponse);
-            }
-            if (this.handleScrollUp) {
-                ipcRenderer.removeListener('scroll-response-up', this.handleScrollUp);
-            }
-            if (this.handleScrollDown) {
-                ipcRenderer.removeListener('scroll-response-down', this.handleScrollDown);
-            }
-            if (this.handleNewResponse) {
-                ipcRenderer.removeListener('new-response', this.handleNewResponse);
-            }
-            if (this.handleResponseComplete) {
-                ipcRenderer.removeListener('response-complete', this.handleResponseComplete);
-            }
-            if (this.handleRequestCancelled) {
-                ipcRenderer.removeListener('request-cancelled', this.handleRequestCancelled);
-            }
-            if (this.handleStatusUpdate) {
-                ipcRenderer.removeListener('update-status', this.handleStatusUpdate);
-            }
+        if (this._cleanups) {
+            this._cleanups.forEach(cleanup => cleanup && cleanup());
+            this._cleanups = [];
         }
     }
 
@@ -643,23 +558,31 @@ export class AssistantView extends LitElement {
         // Immediately set state to cancelled for responsive UI
         this._setRequestState(RequestState.CANCELLED);
 
-        if (window.require) {
-            const { ipcRenderer } = window.require('electron');
-            ipcRenderer.invoke('cancel-current-request').then(() => {
-                // After backend confirms, transition to IDLE
+        if (window.electronAPI) {
+            window.electronAPI.invoke('cancel-current-request').then(() => {
                 setTimeout(() => this._setRequestState(RequestState.IDLE), 500);
             }).catch((error) => {
                 console.error('Error cancelling request:', error);
                 this._setRequestState(RequestState.IDLE);
             });
         } else {
-            // No IPC available, just reset to IDLE
             setTimeout(() => this._setRequestState(RequestState.IDLE), 500);
         }
     }
 
     _isRequestInProgress() {
         return isRequestInProgress(this.requestState);
+    }
+
+    async handleCopyResponse() {
+        const currentResponse = this.getCurrentResponse();
+        try {
+            await navigator.clipboard.writeText(currentResponse);
+            this._copyFeedback = true;
+            setTimeout(() => { this._copyFeedback = false; }, 1500);
+        } catch (err) {
+            console.error('Failed to copy:', err);
+        }
     }
 
     async handleSendText() {
@@ -688,22 +611,6 @@ export class AssistantView extends LitElement {
         }
     }
 
-    async loadLimits() {
-        if (window.assistant?.storage?.getTodayLimits) {
-            const limits = await window.assistant.storage.getTodayLimits();
-            this.flashCount = limits.flash?.count || 0;
-            this.flashLiteCount = limits.flashLite?.count || 0;
-        }
-    }
-
-    getTotalUsed() {
-        return this.flashCount + this.flashLiteCount;
-    }
-
-    getTotalAvailable() {
-        return 40; // 20 flash + 20 flash-lite
-    }
-
     async handleScreenAnswer() {
         // Prevent multiple clicks while processing
         if (this._isRequestInProgress()) {
@@ -715,8 +622,6 @@ export class AssistantView extends LitElement {
             this._setRequestState(RequestState.THINKING);
 
             window.captureManualScreenshot();
-            // Reload limits after a short delay to catch the update
-            setTimeout(() => this.loadLimits(), 1000);
         }
     }
 
@@ -784,7 +689,12 @@ export class AssistantView extends LitElement {
         const inProgress = this._isRequestInProgress();
 
         return html`
-            <div class="response-container" id="responseContainer"></div>
+            <div class="response-wrapper">
+                <button class="copy-btn" @click=${this.handleCopyResponse}>
+                    ${this._copyFeedback ? 'Copied!' : 'Copy'}
+                </button>
+                <div class="response-container" id="responseContainer"></div>
+            </div>
 
             ${inProgress ? html`
                 <div class="request-status-container">
@@ -820,26 +730,12 @@ export class AssistantView extends LitElement {
                     class="${inProgress ? 'input-disabled' : ''}"
                 />
 
-                <div class="screen-answer-btn-wrapper">
-                    <div class="tooltip">
-                        <div class="tooltip-row">
-                            <span class="tooltip-label">Flash</span>
-                            <span class="tooltip-value">${this.flashCount}/20</span>
-                        </div>
-                        <div class="tooltip-row">
-                            <span class="tooltip-label">Flash Lite</span>
-                            <span class="tooltip-value">${this.flashLiteCount}/20</span>
-                        </div>
-                        <div class="tooltip-note">Resets every 24 hours</div>
-                    </div>
-                    <button class="screen-answer-btn" @click=${this.handleScreenAnswer} ?disabled=${inProgress}>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M15.98 1.804a1 1 0 0 0-1.96 0l-.24 1.192a1 1 0 0 1-.784.785l-1.192.238a1 1 0 0 0 0 1.962l1.192.238a1 1 0 0 1 .785.785l.238 1.192a1 1 0 0 0 1.962 0l.238-1.192a1 1 0 0 1 .785-.785l1.192-.238a1 1 0 0 0 0-1.962l-1.192-.238a1 1 0 0 1-.785-.785l-.238-1.192ZM6.949 5.684a1 1 0 0 0-1.898 0l-.683 2.051a1 1 0 0 1-.633.633l-2.051.683a1 1 0 0 0 0 1.898l2.051.684a1 1 0 0 1 .633.632l.683 2.051a1 1 0 0 0 1.898 0l.683-2.051a1 1 0 0 1 .633-.633l2.051-.683a1 1 0 0 0 0-1.898l-2.051-.683a1 1 0 0 1-.633-.633L6.95 5.684ZM13.949 13.684a1 1 0 0 0-1.898 0l-.184.551a1 1 0 0 1-.632.633l-.551.183a1 1 0 0 0 0 1.898l.551.183a1 1 0 0 1 .633.633l.183.551a1 1 0 0 0 1.898 0l.184-.551a1 1 0 0 1 .632-.633l.551-.183a1 1 0 0 0 0-1.898l-.551-.184a1 1 0 0 1-.633-.632l-.183-.551Z" />
-                        </svg>
-                        <span>${inProgress ? 'Processing...' : 'Analyze screen'}</span>
-                        <span class="usage-count">(${this.getTotalUsed()}/${this.getTotalAvailable()})</span>
-                    </button>
-                </div>
+                <button class="screen-answer-btn" @click=${this.handleScreenAnswer} ?disabled=${inProgress}>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M15.98 1.804a1 1 0 0 0-1.96 0l-.24 1.192a1 1 0 0 1-.784.785l-1.192.238a1 1 0 0 0 0 1.962l1.192.238a1 1 0 0 1 .785.785l.238 1.192a1 1 0 0 0 1.962 0l.238-1.192a1 1 0 0 1 .785-.785l1.192-.238a1 1 0 0 0 0-1.962l-1.192-.238a1 1 0 0 1-.785-.785l-.238-1.192ZM6.949 5.684a1 1 0 0 0-1.898 0l-.683 2.051a1 1 0 0 1-.633.633l-2.051.683a1 1 0 0 0 0 1.898l2.051.684a1 1 0 0 1 .633.632l.683 2.051a1 1 0 0 0 1.898 0l.683-2.051a1 1 0 0 1 .633-.633l2.051-.683a1 1 0 0 0 0-1.898l-2.051-.683a1 1 0 0 1-.633-.633L6.95 5.684ZM13.949 13.684a1 1 0 0 0-1.898 0l-.184.551a1 1 0 0 1-.632.633l-.551.183a1 1 0 0 0 0 1.898l.551.183a1 1 0 0 1 .633.633l.183.551a1 1 0 0 0 1.898 0l.184-.551a1 1 0 0 1 .632-.633l.551-.183a1 1 0 0 0 0-1.898l-.551-.184a1 1 0 0 1-.633-.632l-.183-.551Z" />
+                    </svg>
+                    <span>${inProgress ? 'Processing...' : 'Analyze screen'}</span>
+                </button>
             </div>
         `;
     }

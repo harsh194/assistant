@@ -235,36 +235,32 @@ export class AssistantApp extends LitElement {
         // Apply layout mode to document root
         this.updateLayoutMode();
 
-        // Set up IPC listeners if needed
-        if (window.require) {
-            const { ipcRenderer } = window.require('electron');
-            ipcRenderer.on('new-response', (_, response) => {
+        // Set up IPC listeners
+        if (window.electronAPI) {
+            this._cleanups = [];
+            this._cleanups.push(window.electronAPI.on('new-response', (response) => {
                 this.addNewResponse(response);
-            });
-            ipcRenderer.on('update-response', (_, response) => {
+            }));
+            this._cleanups.push(window.electronAPI.on('update-response', (response) => {
                 this.updateCurrentResponse(response);
-            });
-            ipcRenderer.on('update-status', (_, status) => {
+            }));
+            this._cleanups.push(window.electronAPI.on('update-status', (status) => {
                 this.setStatus(status);
-            });
-            ipcRenderer.on('click-through-toggled', (_, isEnabled) => {
+            }));
+            this._cleanups.push(window.electronAPI.on('click-through-toggled', (isEnabled) => {
                 this._isClickThrough = isEnabled;
-            });
-            ipcRenderer.on('reconnect-failed', (_, data) => {
+            }));
+            this._cleanups.push(window.electronAPI.on('reconnect-failed', (data) => {
                 this.addNewResponse(data.message);
-            });
+            }));
         }
     }
 
     disconnectedCallback() {
         super.disconnectedCallback();
-        if (window.require) {
-            const { ipcRenderer } = window.require('electron');
-            ipcRenderer.removeAllListeners('new-response');
-            ipcRenderer.removeAllListeners('update-response');
-            ipcRenderer.removeAllListeners('update-status');
-            ipcRenderer.removeAllListeners('click-through-toggled');
-            ipcRenderer.removeAllListeners('reconnect-failed');
+        if (this._cleanups) {
+            this._cleanups.forEach(cleanup => cleanup && cleanup());
+            this._cleanups = [];
         }
     }
 
@@ -328,12 +324,10 @@ export class AssistantApp extends LitElement {
             assistant.stopCapture();
 
             // Close the session and save co-pilot data if active
-            if (window.require) {
-                const { ipcRenderer } = window.require('electron');
-
+            if (window.electronAPI) {
                 // Save co-pilot data to the session before closing
                 if (this.copilotActive) {
-                    const sessionData = await ipcRenderer.invoke('get-current-session');
+                    const sessionData = await window.electronAPI.invoke('get-current-session');
                     if (sessionData.success && sessionData.data.sessionId) {
                         this._copilotSessionId = sessionData.data.sessionId;
                         await assistant.storage.saveSession(sessionData.data.sessionId, {
@@ -343,7 +337,7 @@ export class AssistantApp extends LitElement {
                     }
                 }
 
-                await ipcRenderer.invoke('close-session');
+                await window.electronAPI.invoke('close-session');
             }
             this.sessionActive = false;
 
@@ -371,17 +365,15 @@ export class AssistantApp extends LitElement {
             this.currentView = 'main';
         } else {
             // Quit the entire application
-            if (window.require) {
-                const { ipcRenderer } = window.require('electron');
-                await ipcRenderer.invoke('quit-application');
+            if (window.electronAPI) {
+                await window.electronAPI.invoke('quit-application');
             }
         }
     }
 
     async handleHideToggle() {
-        if (window.require) {
-            const { ipcRenderer } = window.require('electron');
-            await ipcRenderer.invoke('toggle-window-visibility');
+        if (window.electronAPI) {
+            await window.electronAPI.invoke('toggle-window-visibility');
         }
     }
 
@@ -412,6 +404,15 @@ export class AssistantApp extends LitElement {
         this.requestUpdate();
     }
 
+    async handleUseTemplate(template) {
+        // Apply template prep data to co-pilot prep storage, then navigate to session-prep
+        if (template && template.prepData) {
+            await assistant.storage.setCoPilotPrep(template.prepData);
+        }
+        this.currentView = 'session-prep';
+        this.requestUpdate();
+    }
+
     async handleStartSession(prepData) {
         const apiKey = await assistant.storage.getApiKey();
         if (!apiKey) {
@@ -429,12 +430,16 @@ export class AssistantApp extends LitElement {
         this.currentResponseIndex = -1;
         this.startTime = Date.now();
         this.currentView = 'assistant';
+
+        // Clear the draft so next prep starts fresh
+        assistant.storage.clearCoPilotPrep().catch(err =>
+            console.warn('Failed to clear co-pilot prep:', err)
+        );
     }
 
     async handleAPIKeyHelp() {
-        if (window.require) {
-            const { ipcRenderer } = window.require('electron');
-            await ipcRenderer.invoke('open-external', 'https://assistant.ai/help/api-key');
+        if (window.electronAPI) {
+            await window.electronAPI.invoke('open-external', 'https://assistant.ai/help/api-key');
         }
     }
 
@@ -466,9 +471,8 @@ export class AssistantApp extends LitElement {
 
     // Help view event handlers
     async handleExternalLinkClick(url) {
-        if (window.require) {
-            const { ipcRenderer } = window.require('electron');
-            await ipcRenderer.invoke('open-external', url);
+        if (window.electronAPI) {
+            await window.electronAPI.invoke('open-external', url);
         }
     }
 
@@ -500,9 +504,8 @@ export class AssistantApp extends LitElement {
         super.updated(changedProperties);
 
         // Only notify main process of view change if the view actually changed
-        if (changedProperties.has('currentView') && window.require) {
-            const { ipcRenderer } = window.require('electron');
-            ipcRenderer.send('view-changed', this.currentView);
+        if (changedProperties.has('currentView') && window.electronAPI) {
+            window.electronAPI.send('view-changed', this.currentView);
 
             // Add a small delay to smooth out the transition
             const viewContainer = this.shadowRoot?.querySelector('.view-container');
@@ -534,6 +537,7 @@ export class AssistantApp extends LitElement {
                     <main-view
                         .onStart=${() => this.handleStart()}
                         .onPrepare=${() => this.handlePrepareClick()}
+                        .onUseTemplate=${template => this.handleUseTemplate(template)}
                         .onAPIKeyHelp=${() => this.handleAPIKeyHelp()}
                         .onLayoutModeChange=${layoutMode => this.handleLayoutModeChange(layoutMode)}
                     ></main-view>
@@ -661,10 +665,9 @@ export class AssistantApp extends LitElement {
         this.updateLayoutMode();
 
         // Notify main process about layout change for window resizing
-        if (window.require) {
+        if (window.electronAPI) {
             try {
-                const { ipcRenderer } = window.require('electron');
-                await ipcRenderer.invoke('update-sizes');
+                await window.electronAPI.invoke('update-sizes');
             } catch (error) {
                 console.error('Failed to update sizes in main process:', error);
             }
@@ -678,10 +681,9 @@ export class AssistantApp extends LitElement {
         await assistant.storage.updatePreference('windowWidth', width);
 
         // Notify main process about width change for window resizing
-        if (window.require) {
+        if (window.electronAPI) {
             try {
-                const { ipcRenderer } = window.require('electron');
-                await ipcRenderer.invoke('update-sizes');
+                await window.electronAPI.invoke('update-sizes');
             } catch (error) {
                 console.error('Failed to update sizes in main process:', error);
             }
@@ -695,10 +697,9 @@ export class AssistantApp extends LitElement {
         await assistant.storage.updatePreference('windowHeight', height);
 
         // Notify main process about height change for window resizing
-        if (window.require) {
+        if (window.electronAPI) {
             try {
-                const { ipcRenderer } = window.require('electron');
-                await ipcRenderer.invoke('update-sizes');
+                await window.electronAPI.invoke('update-sizes');
             } catch (error) {
                 console.error('Failed to update sizes in main process:', error);
             }

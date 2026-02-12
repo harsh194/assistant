@@ -3,7 +3,8 @@ const { BrowserWindow, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const { saveDebugAudio } = require('../audioUtils');
 const { getSystemPrompt } = require('./prompts');
-const { getAvailableModel, incrementLimitCount, getApiKey } = require('../storage');
+const { getAvailableModel, incrementLimitCount, getApiKey, getAllEmbeddings } = require('../storage');
+const { RetrievalEngine } = require('./retrieval');
 
 // Conversation tracking variables
 let currentSessionId = null;
@@ -13,6 +14,7 @@ let screenAnalysisHistory = [];
 let currentProfile = null;
 let currentCustomPrompt = null;
 let isInitializingSession = false;
+let retrievalEngine = null;
 
 function formatSpeakerResults(results) {
     let text = '';
@@ -183,7 +185,7 @@ async function getStoredSetting(key, defaultValue) {
     return defaultValue;
 }
 
-async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'interview', language = 'en-US', isReconnect = false, copilotPrep = null) {
+async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'interview', language = 'en-US', isReconnect = false, copilotPrep = null, customProfileData = null) {
     if (isInitializingSession) {
         console.log('Session initialization already in progress');
         return false;
@@ -196,7 +198,7 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
 
     // Store params for reconnection
     if (!isReconnect) {
-        sessionParams = { apiKey, customPrompt, profile, language, copilotPrep };
+        sessionParams = { apiKey, customPrompt, profile, language, copilotPrep, customProfileData };
         reconnectAttempts = 0;
     }
 
@@ -210,7 +212,17 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
     const enabledTools = await getEnabledTools();
     const googleSearchEnabled = enabledTools.some(tool => tool.googleSearch);
 
-    const systemPrompt = getSystemPrompt(profile, customPrompt, googleSearchEnabled, copilotPrep);
+    // Check if RAG embeddings exist for uploaded documents
+    const allEmbeddings = copilotPrep?.referenceDocuments?.length > 0 ? getAllEmbeddings() : [];
+    const hasEmbeddings = allEmbeddings.length > 0;
+    const systemPrompt = getSystemPrompt(profile, customPrompt, googleSearchEnabled, copilotPrep, customProfileData, hasEmbeddings);
+
+    // Initialize retrieval engine if embeddings available
+    if (!isReconnect && hasEmbeddings) {
+        retrievalEngine = new RetrievalEngine(apiKey, allEmbeddings);
+    } else if (!isReconnect) {
+        retrievalEngine = null;
+    }
 
     // Initialize new conversation session only on first connect
     if (!isReconnect) {
@@ -259,6 +271,19 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
 
                             // Notify renderer that response generation is complete
                             sendToRenderer('response-complete', { source: 'live-session' });
+
+                            // Dynamic RAG: retrieve and inject relevant document context
+                            if (retrievalEngine && retrievalEngine.canRetrieve() && conversationHistory.length > 0) {
+                                const recentTurns = conversationHistory.slice(-3);
+                                const engine = retrievalEngine; // capture reference before async
+                                engine.retrieve(recentTurns).then(chunks => {
+                                    if (chunks.length > 0 && global.geminiSessionRef?.current) {
+                                        const contextText = engine.formatContextInjection(chunks);
+                                        global.geminiSessionRef.current.sendRealtimeInput({ text: contextText })
+                                            .catch(err => console.warn('RAG injection failed:', err.message));
+                                    }
+                                }).catch(err => console.warn('RAG retrieval error:', err.message));
+                            }
                         }
                         messageBuffer = '';
                     }
@@ -343,7 +368,8 @@ async function attemptReconnect() {
             sessionParams.profile,
             sessionParams.language,
             true, // isReconnect
-            sessionParams.copilotPrep
+            sessionParams.copilotPrep,
+            sessionParams.customProfileData
         );
 
         if (session && global.geminiSessionRef) {
@@ -598,8 +624,8 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     // Store the geminiSessionRef globally for reconnection access
     global.geminiSessionRef = geminiSessionRef;
 
-    ipcMain.handle('initialize-gemini', async (event, apiKey, customPrompt, profile = 'interview', language = 'en-US', copilotPrep = null) => {
-        const session = await initializeGeminiSession(apiKey, customPrompt, profile, language, false, copilotPrep);
+    ipcMain.handle('initialize-gemini', async (event, apiKey, customPrompt, profile = 'interview', language = 'en-US', copilotPrep = null, customProfileData = null) => {
+        const session = await initializeGeminiSession(apiKey, customPrompt, profile, language, false, copilotPrep, customProfileData);
         if (session) {
             geminiSessionRef.current = session;
             return true;
@@ -730,6 +756,12 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
             // Set flag to prevent reconnection attempts
             isUserClosing = true;
             sessionParams = null;
+
+            // Cleanup retrieval engine
+            if (retrievalEngine) {
+                retrievalEngine.reset();
+                retrievalEngine = null;
+            }
 
             // Cleanup session
             if (geminiSessionRef.current) {

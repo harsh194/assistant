@@ -557,6 +557,9 @@ export class CustomizeView extends LitElement {
         isClearing: { type: Boolean },
         clearStatusMessage: { type: String },
         clearStatusType: { type: String },
+        customProfiles: { type: Array },
+        showProfileEditor: { type: Boolean },
+        editingProfile: { type: Object },
     };
 
     constructor() {
@@ -597,6 +600,11 @@ export class CustomizeView extends LitElement {
 
         // Active section for sidebar navigation
         this.activeSection = 'profile';
+
+        // Custom profiles
+        this.customProfiles = [];
+        this.showProfileEditor = false;
+        this.editingProfile = null;
 
         // Theme default
         this.theme = 'dark';
@@ -678,9 +686,10 @@ export class CustomizeView extends LitElement {
 
     async _loadFromStorage() {
         try {
-            const [prefs, keybinds] = await Promise.all([
+            const [prefs, keybinds, customProfiles] = await Promise.all([
                 assistant.storage.getPreferences(),
-                assistant.storage.getKeybinds()
+                assistant.storage.getKeybinds(),
+                assistant.storage.getCustomProfiles()
             ]);
 
             this.googleSearchEnabled = prefs.googleSearchEnabled ?? true;
@@ -689,6 +698,7 @@ export class CustomizeView extends LitElement {
             this.audioMode = prefs.audioMode ?? 'speaker_only';
             this.customPrompt = prefs.customPrompt ?? '';
             this.theme = prefs.theme ?? 'dark';
+            this.customProfiles = customProfiles || [];
 
             if (keybinds) {
                 this.keybinds = { ...this.getDefaultKeybinds(), ...keybinds };
@@ -709,7 +719,7 @@ export class CustomizeView extends LitElement {
     }
 
     getProfiles() {
-        return [
+        const builtIn = [
             {
                 value: 'interview',
                 name: 'Job Interview',
@@ -741,6 +751,13 @@ export class CustomizeView extends LitElement {
                 description: 'Academic assistance for test-taking and exam questions',
             },
         ];
+        const custom = (this.customProfiles || []).map(p => ({
+            value: `custom-${p.id}`,
+            name: p.name,
+            description: 'Custom profile',
+            isCustom: true,
+        }));
+        return [...builtIn, ...custom];
     }
 
     getLanguages() {
@@ -779,7 +796,7 @@ export class CustomizeView extends LitElement {
     }
 
     getProfileNames() {
-        return {
+        const names = {
             interview: 'Job Interview',
             sales: 'Sales Call',
             meeting: 'Business Meeting',
@@ -787,11 +804,56 @@ export class CustomizeView extends LitElement {
             negotiation: 'Negotiation',
             exam: 'Exam Assistant',
         };
+        (this.customProfiles || []).forEach(p => {
+            names[`custom-${p.id}`] = p.name;
+        });
+        return names;
     }
 
     handleProfileSelect(e) {
         this.selectedProfile = e.target.value;
         this.onProfileChange(this.selectedProfile);
+    }
+
+    openProfileEditor(existingProfile = null) {
+        this.editingProfile = existingProfile
+            ? { ...existingProfile }
+            : { id: '', name: '', systemPrompt: '' };
+        this.showProfileEditor = true;
+    }
+
+    closeProfileEditor() {
+        this.showProfileEditor = false;
+        this.editingProfile = null;
+    }
+
+    handleProfileNameInput(e) {
+        this.editingProfile = { ...this.editingProfile, name: e.target.value };
+    }
+
+    handleProfilePromptInput(e) {
+        this.editingProfile = { ...this.editingProfile, systemPrompt: e.target.value };
+    }
+
+    async saveCustomProfile() {
+        if (!this.editingProfile.name.trim() || !this.editingProfile.systemPrompt.trim()) return;
+        const profile = {
+            id: this.editingProfile.id || Date.now().toString(),
+            name: this.editingProfile.name.trim(),
+            systemPrompt: this.editingProfile.systemPrompt.trim(),
+        };
+        await assistant.storage.saveCustomProfile(profile);
+        this.customProfiles = await assistant.storage.getCustomProfiles();
+        this.closeProfileEditor();
+    }
+
+    async deleteCustomProfile(profileId) {
+        await assistant.storage.deleteCustomProfile(profileId);
+        this.customProfiles = await assistant.storage.getCustomProfiles();
+        if (this.selectedProfile === `custom-${profileId}`) {
+            this.selectedProfile = 'interview';
+            this.onProfileChange(this.selectedProfile);
+        }
     }
 
     handleLanguageSelect(e) {
@@ -857,9 +919,8 @@ export class CustomizeView extends LitElement {
     async saveKeybinds() {
         await assistant.storage.setKeybinds(this.keybinds);
         // Send to main process to update global shortcuts
-        if (window.require) {
-            const { ipcRenderer } = window.require('electron');
-            ipcRenderer.send('update-keybinds', this.keybinds);
+        if (window.electronAPI) {
+            window.electronAPI.send('update-keybinds', this.keybinds);
         }
     }
 
@@ -873,9 +934,8 @@ export class CustomizeView extends LitElement {
         this.keybinds = this.getDefaultKeybinds();
         await assistant.storage.setKeybinds(null);
         this.requestUpdate();
-        if (window.require) {
-            const { ipcRenderer } = window.require('electron');
-            ipcRenderer.send('update-keybinds', this.keybinds);
+        if (window.electronAPI) {
+            window.electronAPI.send('update-keybinds', this.keybinds);
         }
     }
 
@@ -1019,10 +1079,9 @@ export class CustomizeView extends LitElement {
         await assistant.storage.updatePreference('googleSearchEnabled', this.googleSearchEnabled);
 
         // Notify main process if available
-        if (window.require) {
+        if (window.electronAPI) {
             try {
-                const { ipcRenderer } = window.require('electron');
-                await ipcRenderer.invoke('update-google-search-setting', this.googleSearchEnabled);
+                await window.electronAPI.invoke('update-google-search-setting', this.googleSearchEnabled);
             } catch (error) {
                 console.error('Failed to notify main process:', error);
             }
@@ -1051,9 +1110,8 @@ export class CustomizeView extends LitElement {
                 this.clearStatusMessage = 'Closing application...';
                 this.requestUpdate();
                 setTimeout(async () => {
-                    if (window.require) {
-                        const { ipcRenderer } = window.require('electron');
-                        await ipcRenderer.invoke('quit-application');
+                    if (window.electronAPI) {
+                        await window.electronAPI.invoke('quit-application');
                     }
                 }, 1000);
             }, 2000);
@@ -1115,7 +1173,7 @@ export class CustomizeView extends LitElement {
                             ${profiles.map(
             profile => html`
                                     <option value=${profile.value} ?selected=${this.selectedProfile === profile.value}>
-                                        ${profile.name}
+                                        ${profile.name}${profile.isCustom ? ' (Custom)' : ''}
                                     </option>
                                 `
         )}
@@ -1135,6 +1193,50 @@ export class CustomizeView extends LitElement {
                             Personalize the AI's behavior with specific instructions
                         </div>
                     </div>
+                </div>
+
+                <div class="content-header" style="margin-top: 16px;">Custom Profiles</div>
+                <div class="form-grid">
+                    ${this.customProfiles.length > 0 ? html`
+                        ${this.customProfiles.map(p => html`
+                            <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border-color);">
+                                <span style="font-size: 12px; color: var(--text-color);">${p.name}</span>
+                                <div style="display: flex; gap: 6px;">
+                                    <button class="form-control" style="padding: 3px 8px; font-size: 11px; cursor: pointer; width: auto;"
+                                        @click=${() => this.openProfileEditor(p)}>Edit</button>
+                                    <button class="form-control" style="padding: 3px 8px; font-size: 11px; cursor: pointer; width: auto; color: var(--error-color);"
+                                        @click=${() => this.deleteCustomProfile(p.id)}>Delete</button>
+                                </div>
+                            </div>
+                        `)}
+                    ` : html`
+                        <div class="form-description" style="margin-bottom: 8px;">No custom profiles yet</div>
+                    `}
+                    <div class="form-group">
+                        <button class="form-control" style="padding: 6px 12px; font-size: 12px; cursor: pointer; width: auto;"
+                            @click=${() => this.openProfileEditor()}>+ Create Profile</button>
+                    </div>
+
+                    ${this.showProfileEditor ? html`
+                        <div class="form-group" style="border: 1px solid var(--border-color); border-radius: 3px; padding: 12px; margin-top: 8px;">
+                            <label class="form-label">Profile Name</label>
+                            <input type="text" class="form-control"
+                                placeholder="e.g., Technical Interview"
+                                .value=${this.editingProfile?.name || ''}
+                                @input=${this.handleProfileNameInput} />
+                            <label class="form-label" style="margin-top: 8px;">System Prompt</label>
+                            <textarea class="form-control" style="min-height: 100px;"
+                                placeholder="Describe how the AI should behave in this mode. For example: You are a technical interview assistant..."
+                                .value=${this.editingProfile?.systemPrompt || ''}
+                                @input=${this.handleProfilePromptInput}></textarea>
+                            <div style="display: flex; gap: 6px; margin-top: 8px;">
+                                <button class="form-control" style="padding: 6px 12px; font-size: 12px; cursor: pointer; width: auto;"
+                                    @click=${this.saveCustomProfile}>Save</button>
+                                <button class="form-control" style="padding: 6px 12px; font-size: 12px; cursor: pointer; width: auto;"
+                                    @click=${this.closeProfileEditor}>Cancel</button>
+                            </div>
+                        </div>
+                    ` : ''}
                 </div>
             </div>
         `;

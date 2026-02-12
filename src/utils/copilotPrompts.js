@@ -2,7 +2,7 @@
  * Co-Pilot prompt extensions for structured session context and behavioral instructions.
  */
 
-function buildCoPilotContext(prepData) {
+function buildCoPilotContext(prepData, hasEmbeddings = false) {
     if (!prepData) return '';
 
     const sections = ['=== SESSION OBJECTIVES ==='];
@@ -28,14 +28,23 @@ function buildCoPilotContext(prepData) {
     }
 
     if (prepData.referenceDocuments && prepData.referenceDocuments.length > 0) {
-        sections.push('\nREFERENCE MATERIALS:');
-        prepData.referenceDocuments.forEach(doc => {
-            sections.push(`--- ${doc.name} ---`);
-            if (doc.extractedText) {
-                sections.push(doc.extractedText);
-            }
-            sections.push('--- end ---');
-        });
+        if (hasEmbeddings) {
+            // RAG mode: documents will be injected dynamically during conversation
+            const docNames = prepData.referenceDocuments.map(d => d.name).join(', ');
+            sections.push('\nREFERENCE MATERIALS:');
+            sections.push(`Documents uploaded: ${docNames}.`);
+            sections.push('Relevant excerpts from these documents will be provided dynamically during the conversation based on discussion topics. When you receive [REFERENCE CONTEXT] blocks, use that information if relevant to the current discussion.');
+        } else {
+            // Fallback: inject full document text (no embeddings available)
+            sections.push('\nREFERENCE MATERIALS:');
+            prepData.referenceDocuments.forEach(doc => {
+                sections.push(`--- ${doc.name} ---`);
+                if (doc.extractedText) {
+                    sections.push(doc.extractedText);
+                }
+                sections.push('--- end ---');
+            });
+        }
     }
 
     if (prepData.customNotes) {

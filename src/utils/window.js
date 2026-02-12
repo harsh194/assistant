@@ -22,8 +22,9 @@ function createWindow(sendToRenderer, geminiSessionRef) {
         hasShadow: false,
         alwaysOnTop: true,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false, // TODO: change to true
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, '../preload.js'),
             backgroundThrottling: false,
             enableBlinkFeatures: 'GetDisplayMedia',
             webSecurity: true,
@@ -435,7 +436,7 @@ function setupWindowIpcHandlers(mainWindow, sendToRenderer, geminiSessionRef) {
                 viewName = await event.sender.executeJavaScript('assistant.getCurrentView()');
                 layoutMode = await event.sender.executeJavaScript('assistant.getLayoutMode()');
             } catch (error) {
-                console.warn('Failed to get view/layout from renderer, using defaults:', error);
+                // Renderer not ready yet, use defaults silently
                 viewName = 'main';
                 layoutMode = 'normal';
             }
