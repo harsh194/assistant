@@ -1,0 +1,52 @@
+flowchart TB
+    subgraph Input[User Input]
+        MIC[Microphone]
+        SYS[System Audio]
+        SCREEN[Screen Capture]
+    end
+    
+    subgraph Electron[Electron Main Process]
+        GW[Ghost Window]
+        AC[Audio Capture]
+        WS[Gemini WebSocket]
+        TRANS[Translation Engine]
+        IPC[IPC Bridge]
+    end
+    
+    subgraph Lit[Renderer - Lit Components]
+        NP[NotesParser]
+        RAG[RAG Engine]
+        UI[AssistantView UI]
+    end
+    
+    subgraph Data[Storage]
+        EMB[(Embeddings)]
+        SESS[(Sessions)]
+    end
+    
+    subgraph API[Google Gemini API]
+        AUDIO[Audio Stream]
+        EMBED[Embeddings]
+        OCR[Vision OCR]
+    end
+
+    MIC --> AC
+    SYS --> AC
+    AC --> WS
+    WS <--> AUDIO
+    WS --> TRANS
+    TRANS --> UI
+    SCREEN --> OCR
+    OCR --> UI
+    RAG <--> EMBED
+    RAG --> EMB
+    OCR -.-> RAG
+    
+    GW -.-> UI
+    IPC <--> NP
+    IPC <--> RAG
+    IPC <--> UI
+    WS --> IPC
+    
+    NP --> SESS
+    SESS --> DOCX[DOCX Export]
