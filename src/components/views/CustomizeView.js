@@ -746,9 +746,9 @@ export class CustomizeView extends LitElement {
                 description: 'Guidance for business negotiations and deals',
             },
             {
-                value: 'exam',
-                name: 'Exam Assistant',
-                description: 'Academic assistance for test-taking and exam questions',
+                value: 'study',
+                name: 'Study Coach',
+                description: 'Learning assistant for understanding concepts and exam preparation',
             },
         ];
         const custom = (this.customProfiles || []).map(p => ({
@@ -802,7 +802,7 @@ export class CustomizeView extends LitElement {
             meeting: 'Business Meeting',
             presentation: 'Presentation',
             negotiation: 'Negotiation',
-            exam: 'Exam Assistant',
+            study: 'Study Coach',
         };
         (this.customProfiles || []).forEach(p => {
             names[`custom-${p.id}`] = p.name;

@@ -15,7 +15,7 @@ published: true
 - **営業担当者** - Sales professionals during client calls
 - **ビジネス交渉担当者** - Business negotiators
 - **プレゼンター** - Public speakers and presenters
-- **試験受験者** - Students taking online exams
+- **学習者・受験準備者** - Students preparing for tests and deepening understanding
 
 ### 解決する課題 / Problem Statement
 
@@ -944,6 +944,36 @@ storage.setCredentials({ apiKey: encryptedKey });
 - 全ソースコード公開
 - コミュニティによるセキュリティ監査可能
 - フォーク・カスタマイズ自由
+
+---
+
+## 🤝 責任ある利用について / Responsible Use
+
+### 設計思想 / Design Philosophy
+
+Assistantは**学習の強化**と**コミュニケーションの向上**を目的として設計されています：
+
+**想定される適切な使用例：**
+- 🎯 **面接準備** - 模擬面接での練習と自信の構築
+- 📚 **学習支援** - 概念の理解を深め、知識の定着を助ける
+- 🌐 **言語サポート** - 非ネイティブスピーカーの会話支援とアクセシビリティ向上
+- 📝 **会議メモ** - 議論に集中しながら自動的に要点を記録
+- 🧠 **認知サポート** - 不安症やADHDを持つ方々のリアルタイム補助
+
+**倫理的配慮：**
+このツールは、ユーザーの能力を**置き換える**のではなく**拡張する**ことを目指しています。最終的な判断と発言は常にユーザー自身が行います。
+
+### Intended Use Cases
+
+Assistant is designed to **augment human capability**, not replace it:
+
+- **Interview Preparation**: Practice and build confidence before the real thing
+- **Learning Enhancement**: Deepen understanding, not bypass learning
+- **Accessibility**: Support for non-native speakers, neurodivergent individuals
+- **Meeting Productivity**: Stay engaged while notes are captured automatically
+- **Cognitive Support**: Real-time assistance for anxiety or attention challenges
+
+The AI provides suggestions; the human makes decisions and speaks in their own voice.
 
 ---
 

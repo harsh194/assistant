@@ -116,11 +116,11 @@ CO-PILOT FOCUS (Presentation):
 - Prepare for likely follow-up questions
 - Note audience reactions and concerns raised`,
 
-    exam: `
-CO-PILOT FOCUS (Exam):
-- Keep responses minimal and direct
-- Focus on accuracy over explanation
-- Skip drift detection and topic tracking for efficiency`,
+    study: `
+CO-PILOT FOCUS (Study Session):
+- Emphasize understanding and concept connections
+- Track which topics need more review
+- Note areas of confusion for follow-up study`,
 };
 
 function buildCoPilotInstructions(profile) {

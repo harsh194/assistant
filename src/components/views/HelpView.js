@@ -417,8 +417,8 @@ export class HelpView extends LitElement {
                             <div class="profile-description">Guidance for business negotiations and deals</div>
                         </div>
                         <div class="profile-item">
-                            <div class="profile-name">Exam Assistant</div>
-                            <div class="profile-description">Academic assistance for test-taking and exam questions</div>
+                            <div class="profile-name">Study Coach</div>
+                            <div class="profile-description">Learning assistant for understanding concepts and exam preparation</div>
                         </div>
                     </div>
                 </div>

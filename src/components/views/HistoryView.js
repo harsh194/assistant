@@ -600,7 +600,7 @@ export class HistoryView extends LitElement {
             meeting: 'Business Meeting',
             presentation: 'Presentation',
             negotiation: 'Negotiation',
-            exam: 'Exam Assistant',
+            study: 'Study Coach',
         };
     }
 
@@ -697,7 +697,7 @@ export class HistoryView extends LitElement {
                         <option value="meeting">Meeting</option>
                         <option value="presentation">Presentation</option>
                         <option value="negotiation">Negotiation</option>
-                        <option value="exam">Exam</option>
+                        <option value="study">Study</option>
                         ${(this._customProfiles || []).map(p => html`
                             <option value="custom-${p.id}">${p.name}</option>
                         `)}
