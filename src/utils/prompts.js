@@ -215,6 +215,16 @@ function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled =
         sections.push('\n\n', promptParts.searchUsage);
     }
 
+    // Add input handling guidelines
+    sections.push('\n\n', `**INPUT HANDLING:**
+- If the user input is unclear, too vague, nonsensical, or consists only of random characters (like "o", "asdfjkl", etc.), respond IMMEDIATELY with a polite clarification request
+- Example responses for unclear input:
+  - "I'm not sure I understand. Could you please rephrase or provide more context?"
+  - "That input seems unclear. What would you like help with?"
+  - "I didn't quite catch that. Could you provide more details?"
+- Do NOT spend time trying to interpret meaningless or random text - respond quickly asking for clarification
+- For legitimate but brief inputs, provide helpful responses as normal`);
+
     sections.push('\n\n', promptParts.content);
 
     // Add co-pilot context and instructions if prep data is provided
