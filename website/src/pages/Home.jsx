@@ -58,9 +58,9 @@ function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
           >
-            Get instant, strategic suggestions during interviews, sales calls, and high-stakes meetings.
+            Real-time communication support for professionals, language learners, and anyone who wants to communicate more effectively.
             <br />
-            Not after. Not tomorrow. Right now when it matters most.
+            Prepare better. Speak clearer. Break language barriers.
           </motion.p>
           <motion.div
             className="hero-cta"
@@ -89,7 +89,7 @@ function Home() {
             </div>
             <div className="app-preview-content">
               <div className="chat-bubble ai">
-                <p><strong>Interview Coach:</strong> They're asking about system scalability. Frame your answer with: Load balancing → Caching layer → Database sharding. Start with the user request flow.</p>
+                <p><strong>Communication Coach:</strong> The presenter is discussing system scalability. Key concepts: Load balancing → Caching layer → Database sharding. Would you like me to translate or explain any terms?</p>
               </div>
               <div className="typing-indicator">
                 <span /><span /><span />
@@ -114,27 +114,27 @@ function Home() {
           </motion.div>
           <div className="problem-grid">
             <ProblemCard
-              icon="🎯"
-              title="Job Interviews"
-              problem="You know your skills, but freeze when asked behavioral questions"
+              icon="🌐"
+              title="Language Barriers"
+              problem="Struggling to communicate in a second language during important conversations"
               delay={0}
             />
             <ProblemCard
               icon="💼"
-              title="Sales Calls"
-              problem="You miss objections and realize the perfect response 5 minutes too late"
+              title="Business Meetings"
+              problem="Meetings end with unclear action items and missed opportunities"
               delay={0.1}
             />
             <ProblemCard
               icon="📊"
-              title="Meetings"
-              problem="Meetings end with no decisions, unclear action items, and wasted time"
+              title="Presentations"
+              problem="Losing your structure under pressure and forgetting key points"
               delay={0.2}
             />
             <ProblemCard
-              icon="🎤"
-              title="Presentations"
-              problem="You lose your structure under pressure and forget key points"
+              icon="📚"
+              title="Learning Sessions"
+              problem="Concepts slip away before you can fully grasp them"
               delay={0.3}
             />
           </div>
@@ -196,14 +196,14 @@ function Home() {
           >
             <h2>Clarity in The Moment</h2>
             <p>
-              You're in a technical interview. A system design question appears on screen.
-              Instead of panicking, you get structured guidance instantly—no guessing, no blanking out.
+              You're in a meeting with international colleagues. Technical terms fly by in a second language.
+              Instead of struggling, you get real-time translation and context—communication without barriers.
             </p>
             <ul className="showcase-features">
-              <li>Real-time code and diagram analysis</li>
-              <li>Structured response frameworks</li>
-              <li>Strategic talking points, not scripts</li>
-              <li>Confidence when it counts</li>
+              <li>Live translation between 30+ languages</li>
+              <li>Context-aware explanations</li>
+              <li>Automatic meeting notes and summaries</li>
+              <li>Accessibility for all communication styles</li>
             </ul>
           </motion.div>
           <motion.div
@@ -272,39 +272,39 @@ function Home() {
 
         <div className="profiles-grid">
           <ProfileCard
-            emoji="💼"
-            title="Interview"
-            description="Turn nervousness into structured, confident responses that highlight your strengths"
+            emoji="🌐"
+            title="Live Translation"
+            description="Real-time translation for cross-language conversations—break barriers instantly"
             delay={0}
           />
           <ProfileCard
-            emoji="📊"
-            title="Sales Call"
-            description="Catch objections as they happen and respond with precision—not improvisation"
+            emoji="💼"
+            title="Meeting Assistant"
+            description="End every meeting with clear decisions, action items, and structured notes"
             delay={0.1}
-          />
-          <ProfileCard
-            emoji="🎯"
-            title="Meeting"
-            description="End every meeting with clear decisions and action items, not confusion"
-            delay={0.2}
           />
           <ProfileCard
             emoji="🎤"
             title="Presentation"
             description="Stay on message and structured, even when questions throw you off track"
-            delay={0.3}
-          />
-          <ProfileCard
-            emoji="🤝"
-            title="Negotiation"
-            description="Respond strategically, not emotionally. Keep leverage when pressure rises"
-            delay={0.4}
+            delay={0.2}
           />
           <ProfileCard
             emoji="📚"
             title="Study Coach"
             description="Deepen understanding with guided explanations—learn concepts, not just answers"
+            delay={0.3}
+          />
+          <ProfileCard
+            emoji="🤝"
+            title="Negotiation"
+            description="Respond strategically with data-backed insights when stakes are high"
+            delay={0.4}
+          />
+          <ProfileCard
+            emoji="🧠"
+            title="Accessibility"
+            description="Cognitive support for neurodivergent users—reduce anxiety, stay focused"
             delay={0.5}
           />
         </div>
