@@ -25,6 +25,9 @@ jobs:
           - os: windows-latest
             platform: win32
             arch: x64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
 
     runs-on: ${{ matrix.os }}
     
@@ -90,6 +93,9 @@ jobs:
             ### Windows
             - Download the `.exe` installer
             
+            ### Linux
+            - Download the `.deb` (Debian/Ubuntu) or `.rpm` (Fedora/RHEL) package
+            
             ### Setup
             1. Download and install the app
             2. Get a [Gemini API key](https://aistudio.google.com/apikey)
@@ -103,6 +109,9 @@ jobs:
             artifacts/**/*.dmg
             artifacts/**/*.zip
             artifacts/**/*.exe
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.AppImage
           draft: false
           prerelease: false
         env:
