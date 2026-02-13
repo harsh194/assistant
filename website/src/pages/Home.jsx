@@ -341,6 +341,11 @@ function Home() {
               Download for Linux
             </a>
           </div>
+          <p className="cta-source">
+            <a href="https://github.com/harsh194/assistant" target="_blank" rel="noopener noreferrer">
+              ⭐ View Source on GitHub
+            </a>
+          </p>
         </motion.div>
       </section>
 
@@ -369,10 +374,16 @@ function Home() {
               <Link to="/privacy">Privacy Policy</Link>
               <Link to="/terms">Terms of Service</Link>
             </div>
+            <div className="footer-column">
+              <h4>Open Source</h4>
+              <a href="https://github.com/harsh194/assistant" target="_blank" rel="noopener noreferrer">GitHub Repository</a>
+              <a href="https://github.com/harsh194/assistant/issues" target="_blank" rel="noopener noreferrer">Report Issues</a>
+              <a href="https://github.com/harsh194/assistant/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">License (MIT)</a>
+            </div>
           </div>
         </div>
         <div className="footer-bottom">
-          <p>Built with Gemini AI</p>
+          <p>Built with Gemini AI • <a href="https://github.com/harsh194/assistant" target="_blank" rel="noopener noreferrer">Open Source on GitHub</a></p>
         </div>
       </footer>
     </div>
