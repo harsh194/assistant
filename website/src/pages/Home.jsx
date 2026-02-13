@@ -303,8 +303,8 @@ function Home() {
           />
           <ProfileCard
             emoji="📚"
-            title="Exam"
-            description="Get instant explanations and clarity when you're stuck—no more blanking out"
+            title="Study Coach"
+            description="Deepen understanding with guided explanations—learn concepts, not just answers"
             delay={0.5}
           />
         </div>
