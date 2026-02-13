@@ -173,7 +173,7 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, geminiSessi
                 if (mainWindow.isVisible()) {
                     mainWindow.hide();
                 } else {
-                    mainWindow.showInactive();
+                    mainWindow.show();
                 }
             });
             console.log(`Registered toggleVisibility: ${keybinds.toggleVisibility}`);
@@ -334,7 +334,7 @@ function setupWindowIpcHandlers(mainWindow, sendToRenderer, geminiSessionRef) {
             if (mainWindow.isVisible()) {
                 mainWindow.hide();
             } else {
-                mainWindow.showInactive();
+                mainWindow.show();
             }
             return { success: true };
         } catch (error) {
