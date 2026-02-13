@@ -34,14 +34,22 @@ function createWindow(sendToRenderer, geminiSessionRef) {
     });
 
     const { session, desktopCapturer } = require('electron');
-    session.defaultSession.setDisplayMediaRequestHandler(
-        (request, callback) => {
-            desktopCapturer.getSources({ types: ['screen'] }).then(sources => {
-                callback({ video: sources[0], audio: 'loopback' });
+    session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+        // Get available screen sources and provide the first one with loopback audio
+        desktopCapturer.getSources({ types: ['screen'] })
+            .then(sources => {
+                if (sources && sources.length > 0) {
+                    callback({ video: sources[0], audio: 'loopback' });
+                } else {
+                    console.warn('No screen sources available');
+                    callback({});
+                }
+            })
+            .catch(error => {
+                console.error('Error getting display sources:', error);
+                callback({});
             });
-        },
-        { useSystemPicker: true }
-    );
+    });
 
     mainWindow.setResizable(false);
     mainWindow.setContentProtection(true);
