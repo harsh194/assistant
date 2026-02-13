@@ -17,7 +17,7 @@ export class AssistantView extends LitElement {
         }
 
         .response-container {
-            height: 100%;
+            flex: 1;
             overflow-y: auto;
             font-size: var(--response-font-size, 16px);
             line-height: 1.6;
@@ -26,6 +26,7 @@ export class AssistantView extends LitElement {
             scroll-behavior: smooth;
             user-select: text;
             cursor: text;
+            min-height: 0;
         }
 
         .response-container * {
@@ -161,8 +162,9 @@ export class AssistantView extends LitElement {
         .text-input-container {
             display: flex;
             gap: 8px;
-            margin-top: 8px;
+            padding: 8px 12px;
             align-items: center;
+            flex-shrink: 0;
         }
 
         .text-input-container input {
@@ -259,23 +261,27 @@ export class AssistantView extends LitElement {
         }
 
         .request-status-container {
-            margin-bottom: 8px;
+            padding: 8px 12px;
+            flex-shrink: 0;
         }
 
         .input-disabled {
-            opacity: 0.5;
-            pointer-events: none;
+            opacity: 0.6;
         }
 
         .response-wrapper {
             position: relative;
-            height: calc(100% - 50px);
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
 
         .copy-btn {
             position: absolute;
-            top: 8px;
-            right: 16px;
+            top: 20px;
+            right: 24px;
             background: var(--bg-tertiary);
             border: 1px solid var(--border-color);
             border-radius: 3px;
@@ -288,7 +294,7 @@ export class AssistantView extends LitElement {
             z-index: 10;
         }
 
-        .response-wrapper:hover .copy-btn {
+        :host(:hover) .copy-btn {
             opacity: 1;
         }
 
@@ -833,6 +839,11 @@ export class AssistantView extends LitElement {
     }
 
     async handleSendText() {
+        // Don't send if a request is already in progress
+        if (this._isRequestInProgress()) {
+            return;
+        }
+
         const textInput = this.shadowRoot.querySelector('#textInput');
         if (textInput && textInput.value.trim()) {
             const message = textInput.value.trim();
@@ -854,7 +865,10 @@ export class AssistantView extends LitElement {
     handleTextKeydown(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            this.handleSendText();
+            // Only send if not in progress
+            if (!this._isRequestInProgress()) {
+                this.handleSendText();
+            }
         }
     }
 
@@ -1043,9 +1057,8 @@ export class AssistantView extends LitElement {
                 <input
                     type="text"
                     id="textInput"
-                    placeholder="${inProgress ? 'Processing...' : 'Type a message to the AI...'}"
+                    placeholder="${inProgress ? 'AI is thinking... (you can still type)' : 'Type a message to the AI...'}"
                     @keydown=${this.handleTextKeydown}
-                    ?disabled=${inProgress}
                     class="${inProgress ? 'input-disabled' : ''}"
                 />
 
