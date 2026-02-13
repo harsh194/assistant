@@ -5,7 +5,7 @@ AI-powered desktop assistant for real-time conversations. Built with Electron an
 ## Features
 
 - **Real-Time AI Responses** - Live audio capture and transcription with AI-generated suggestions
-- **Multiple Profiles** - Interview, Sales, Meeting, Presentation, Negotiation, Exam
+- **Multiple Profiles** - Interview, Sales, Meeting, Presentation, Negotiation, Study Coach
 - **Co-Pilot Mode** - Structured, goal-driven session assistant with:
   - Pre-session setup (goal, desired outcome, key topics, reference documents)
   - Document ingestion via Gemini API OCR (PDF, DOCX, images, text)
