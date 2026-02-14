@@ -345,147 +345,108 @@ export class AssistantView extends LitElement {
             margin-left: 4px;
         }
 
-        .peek-toggle {
-            margin-left: auto;
-            background: transparent;
-            color: var(--text-muted);
-            border: 1px solid transparent;
-            padding: 4px 8px;
-            border-radius: 3px;
+        /* Content panels - show/hide without destroying DOM */
+        .content-panel {
+            flex: 1;
+            overflow: hidden;
+            display: none;
+            flex-direction: column;
+        }
+
+        .content-panel.active {
+            display: flex;
+        }
+
+        /* Translation horizontal layout */
+        .translation-horizontal {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .translation-columns {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .translation-column {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .translation-column + .translation-column {
+            border-left: 1px solid var(--border-color);
+        }
+
+        .translation-column-header {
+            padding: 8px 14px;
             font-size: 11px;
-            cursor: pointer;
-            font-family: inherit;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            flex-shrink: 0;
         }
 
-        .peek-toggle.active {
-            color: var(--text-secondary);
-            border-color: var(--border-color);
-        }
-
-        .peek-toggle:hover {
-            color: var(--text-secondary);
-        }
-
-        /* Translation container */
-        .translation-container {
+        .translation-column-scroll {
             flex: 1;
             overflow-y: auto;
-            padding: 16px;
+            padding: 10px 14px;
             scroll-behavior: smooth;
         }
 
-        .translation-container::-webkit-scrollbar { width: 8px; }
-        .translation-container::-webkit-scrollbar-track { background: transparent; }
-        .translation-container::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+        .translation-column-scroll::-webkit-scrollbar { width: 6px; }
+        .translation-column-scroll::-webkit-scrollbar-track { background: transparent; }
+        .translation-column-scroll::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
 
         .translation-empty {
             color: var(--text-muted);
-            font-size: 14px;
+            font-size: 13px;
             text-align: center;
-            padding: 40px 20px;
+            padding: 40px 16px;
+            grid-column: 1 / -1;
         }
 
-        .translation-entry {
-            margin-bottom: 16px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid var(--border-color);
+        .translation-row {
+            padding: 6px 0;
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 40%, transparent);
         }
 
-        .translation-entry:last-child {
+        .translation-row:last-child {
             border-bottom: none;
         }
 
         .translation-speaker {
-            font-size: 11px;
+            font-size: 10px;
             color: var(--text-muted);
             font-weight: 500;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 4px;
+            letter-spacing: 0.4px;
+            margin-bottom: 2px;
             display: block;
         }
 
-        .translation-original {
-            font-size: 13px;
-            color: var(--text-secondary);
-            line-height: 1.5;
-            margin-bottom: 6px;
-            user-select: text;
-            cursor: text;
-        }
-
-        .translation-translated {
-            font-size: var(--response-font-size, 18px);
+        .translation-text {
+            font-size: var(--response-font-size, 16px);
             color: var(--text-color);
-            line-height: 1.6;
-            font-weight: 500;
+            line-height: 1.5;
             user-select: text;
             cursor: text;
         }
 
-        .translation-translated.error {
+        .translation-text.original {
+            color: var(--text-secondary);
+        }
+
+        .translation-text.error {
             color: var(--error-color);
             font-style: italic;
-            font-weight: 400;
-        }
-
-        /* Peek assistant overlay */
-        .peek-overlay {
-            position: absolute;
-            bottom: 12px;
-            right: 12px;
-            width: 280px;
-            max-height: 200px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            overflow: hidden;
-            z-index: 20;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        }
-
-        .peek-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 6px 10px;
-            border-bottom: 1px solid var(--border-color);
-            font-size: 11px;
-            color: var(--text-muted);
-            font-weight: 500;
-        }
-
-        .peek-close {
-            background: none;
-            border: none;
-            color: var(--text-muted);
-            cursor: pointer;
-            font-size: 14px;
-            padding: 0 2px;
-            font-family: inherit;
-        }
-
-        .peek-close:hover {
-            color: var(--text-color);
-        }
-
-        .peek-content {
-            padding: 8px 10px;
-            font-size: 12px;
-            color: var(--text-color);
-            line-height: 1.5;
-            overflow-y: auto;
-            max-height: 160px;
-            user-select: text;
-            cursor: text;
-        }
-
-        .translation-wrapper {
-            position: relative;
-            flex: 1;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
         }
     `;
 
@@ -501,10 +462,11 @@ export class AssistantView extends LitElement {
         copilotActive: { type: Boolean },
         copilotPrep: { type: Object },
         translationEnabled: { type: Boolean },
+        translationSourceLanguage: { type: String },
+        translationTargetLanguage: { type: String },
         _copyFeedback: { state: true },
         _translationMode: { state: true },
         _translationEntries: { state: true },
-        _peekAssistantEnabled: { state: true },
     };
 
     constructor() {
@@ -520,11 +482,12 @@ export class AssistantView extends LitElement {
         this.copilotActive = false;
         this.copilotPrep = null;
         this.translationEnabled = false;
+        this.translationSourceLanguage = '';
+        this.translationTargetLanguage = '';
         this._lastRenderedLength = 0;
         this._copyFeedback = false;
         this._translationMode = false;
         this._translationEntries = [];
-        this._peekAssistantEnabled = false;
         this._sessionNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
         this._lastParsedResponse = '';
     }
@@ -536,6 +499,20 @@ export class AssistantView extends LitElement {
     resetSessionNotes() {
         this._sessionNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
         this._lastParsedResponse = '';
+    }
+
+    _getLanguageName(code) {
+        if (!code) return '';
+        const names = {
+            en: 'English', es: 'Spanish', fr: 'French', de: 'German',
+            it: 'Italian', pt: 'Portuguese', ru: 'Russian', zh: 'Chinese',
+            ja: 'Japanese', ko: 'Korean', ar: 'Arabic', hi: 'Hindi',
+            tr: 'Turkish', nl: 'Dutch', pl: 'Polish', sv: 'Swedish',
+            da: 'Danish', fi: 'Finnish', no: 'Norwegian', th: 'Thai',
+            vi: 'Vietnamese', id: 'Indonesian', ms: 'Malay', uk: 'Ukrainian',
+            cs: 'Czech', ro: 'Romanian', el: 'Greek', he: 'Hebrew',
+        };
+        return names[code] || code;
     }
 
     getProfileNames() {
@@ -736,9 +713,6 @@ export class AssistantView extends LitElement {
             } else if (e.key === 'Tab') {
                 e.preventDefault();
                 this._translationMode = !this._translationMode;
-            } else if ((e.key === 'p' || e.key === 'P') && this._translationMode) {
-                e.preventDefault();
-                this._peekAssistantEnabled = !this._peekAssistantEnabled;
             }
         };
         document.addEventListener('keydown', this._modeKeydownHandler);
@@ -747,7 +721,6 @@ export class AssistantView extends LitElement {
         if (this.translationEnabled) {
             this._translationMode = true;
             this._translationEntries = [];
-            this._peekAssistantEnabled = false;
         }
     }
 
@@ -770,6 +743,12 @@ export class AssistantView extends LitElement {
         if (this._modeKeydownHandler) {
             document.removeEventListener('keydown', this._modeKeydownHandler);
             this._modeKeydownHandler = null;
+        }
+
+        // Clean up copy feedback timer
+        if (this._copyFeedbackTimer) {
+            clearTimeout(this._copyFeedbackTimer);
+            this._copyFeedbackTimer = null;
         }
     }
 
@@ -832,7 +811,11 @@ export class AssistantView extends LitElement {
         try {
             await navigator.clipboard.writeText(currentResponse);
             this._copyFeedback = true;
-            setTimeout(() => { this._copyFeedback = false; }, 1500);
+            if (this._copyFeedbackTimer) clearTimeout(this._copyFeedbackTimer);
+            this._copyFeedbackTimer = setTimeout(() => {
+                this._copyFeedbackTimer = null;
+                this._copyFeedback = false;
+            }, 1500);
         } catch (err) {
             console.error('Failed to copy:', err);
         }
@@ -897,10 +880,10 @@ export class AssistantView extends LitElement {
 
     scrollTranslationToBottom() {
         setTimeout(() => {
-            const container = this.shadowRoot.querySelector('.translation-container');
-            if (container) {
-                container.scrollTop = container.scrollHeight;
-            }
+            const cols = this.shadowRoot.querySelectorAll('.translation-column-scroll');
+            cols.forEach(col => {
+                col.scrollTop = col.scrollHeight;
+            });
         }, 0);
     }
 
@@ -955,78 +938,68 @@ export class AssistantView extends LitElement {
         }
     }
 
-    renderModeIndicator() {
-        return html`
-            <div class="mode-indicator">
-                <button
-                    class="mode-tab ${!this._translationMode ? 'active' : ''}"
-                    @click=${() => { this._translationMode = false; }}>
-                    Assistant <span class="mode-key">A</span>
-                </button>
-                <button
-                    class="mode-tab ${this._translationMode ? 'active' : ''}"
-                    @click=${() => { this._translationMode = true; }}>
-                    Translation <span class="mode-key">T</span>
-                </button>
-                ${this._translationMode ? html`
-                    <button
-                        class="peek-toggle ${this._peekAssistantEnabled ? 'active' : ''}"
-                        @click=${() => { this._peekAssistantEnabled = !this._peekAssistantEnabled; }}>
-                        Peek <span class="mode-key">P</span>
-                    </button>
-                ` : ''}
-            </div>
-        `;
-    }
-
-    renderPeekAssistant() {
-        const latestResponse = this.getCurrentResponse();
-        // Truncate for the peek view
-        const truncated = latestResponse.length > 300 ? latestResponse.substring(0, 300) + '...' : latestResponse;
-        return html`
-            <div class="peek-overlay">
-                <div class="peek-header">
-                    <span>Assistant</span>
-                    <button class="peek-close" @click=${() => { this._peekAssistantEnabled = false; }}>x</button>
-                </div>
-                <div class="peek-content">${truncated}</div>
-            </div>
-        `;
-    }
-
-    renderTranslationMode() {
-        return html`
-            ${this.renderModeIndicator()}
-            <div class="translation-wrapper">
-                <div class="translation-container">
-                    ${this._translationEntries.length === 0
-                        ? html`<div class="translation-empty">Listening for speech to translate...</div>`
-                        : this._translationEntries.map(entry => html`
-                            <div class="translation-entry">
-                                ${entry.speaker ? html`<span class="translation-speaker">${entry.speaker}</span>` : ''}
-                                <div class="translation-original">${entry.original}</div>
-                                <div class="translation-translated ${entry.error ? 'error' : ''}">${entry.translated}</div>
-                            </div>
-                        `)
-                    }
-                </div>
-                ${this._peekAssistantEnabled ? this.renderPeekAssistant() : ''}
-            </div>
-        `;
-    }
-
-    renderAssistantMode() {
+    render() {
         const responseCounter = this.getResponseCounter();
         const inProgress = this._isRequestInProgress();
+        const showTabs = this.translationEnabled;
 
         return html`
-            ${this.translationEnabled ? this.renderModeIndicator() : ''}
+            ${showTabs ? html`
+                <div class="mode-indicator">
+                    <button
+                        class="mode-tab ${!this._translationMode ? 'active' : ''}"
+                        @click=${() => { this._translationMode = false; }}>
+                        Assistant <span class="mode-key">A</span>
+                    </button>
+                    <button
+                        class="mode-tab ${this._translationMode ? 'active' : ''}"
+                        @click=${() => { this._translationMode = true; }}>
+                        Translation <span class="mode-key">T</span>
+                    </button>
+                </div>
+            ` : ''}
 
-            <div class="response-wrapper">
-                <button class="copy-btn" @click=${this.handleCopyResponse}>
-                    ${this._copyFeedback ? 'Copied!' : 'Copy'}
-                </button>
-                <div class="response-container" id="responseContainer"></div>
+            <div class="content-panel ${!showTabs || !this._translationMode ? 'active' : ''}">
+                <div class="response-wrapper">
+                    <button class="copy-btn" @click=${this.handleCopyResponse}>
+                        ${this._copyFeedback ? 'Copied!' : 'Copy'}
+                    </button>
+                    <div class="response-container" id="responseContainer"></div>
+                </div>
+            </div>
+
+            <div class="content-panel ${showTabs && this._translationMode ? 'active' : ''}">
+                <div class="translation-horizontal">
+                    ${this._translationEntries.length === 0
+                        ? html`<div class="translation-empty">Listening for speech to translate...</div>`
+                        : html`
+                            <div class="translation-columns">
+                                <div class="translation-column">
+                                    <div class="translation-column-header">${this._getLanguageName(this.translationSourceLanguage) || 'Original'}</div>
+                                    <div class="translation-column-scroll">
+                                        ${this._translationEntries.map(entry => html`
+                                            <div class="translation-row">
+                                                ${entry.speaker ? html`<span class="translation-speaker">${entry.speaker}</span>` : ''}
+                                                <div class="translation-text original">${entry.original}</div>
+                                            </div>
+                                        `)}
+                                    </div>
+                                </div>
+                                <div class="translation-column">
+                                    <div class="translation-column-header">${this._getLanguageName(this.translationTargetLanguage) || 'Translation'}</div>
+                                    <div class="translation-column-scroll">
+                                        ${this._translationEntries.map(entry => html`
+                                            <div class="translation-row">
+                                                ${entry.speaker ? html`<span class="translation-speaker">${entry.speaker}</span>` : ''}
+                                                <div class="translation-text ${entry.error ? 'error' : ''}">${entry.translated}</div>
+                                            </div>
+                                        `)}
+                                    </div>
+                                </div>
+                            </div>
+                        `
+                    }
+                </div>
             </div>
 
             ${inProgress ? html`
@@ -1070,18 +1043,6 @@ export class AssistantView extends LitElement {
                 </button>
             </div>
         `;
-    }
-
-    render() {
-        if (!this.translationEnabled) {
-            return this.renderAssistantMode();
-        }
-
-        if (this._translationMode) {
-            return this.renderTranslationMode();
-        }
-
-        return this.renderAssistantMode();
     }
 }
 

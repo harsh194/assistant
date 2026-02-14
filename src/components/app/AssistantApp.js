@@ -119,6 +119,8 @@ export class AssistantApp extends LitElement {
         copilotPrep: { type: Object },
         accumulatedNotes: { type: Object },
         translationEnabled: { type: Boolean },
+        _translationSourceLanguage: { state: true },
+        _translationTargetLanguage: { state: true },
     };
 
     constructor() {
@@ -150,6 +152,8 @@ export class AssistantApp extends LitElement {
         this.accumulatedNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
         this._copilotSessionId = null;
         this.translationEnabled = false;
+        this._translationSourceLanguage = '';
+        this._translationTargetLanguage = '';
 
         // Load from storage
         this._loadFromStorage();
@@ -401,6 +405,8 @@ export class AssistantApp extends LitElement {
         const translationPrefs = await assistant.storage.getTranslationConfig();
         if (translationPrefs.enabled && translationPrefs.targetLanguage) {
             this.translationEnabled = true;
+            this._translationSourceLanguage = translationPrefs.sourceLanguage || '';
+            this._translationTargetLanguage = translationPrefs.targetLanguage || '';
             await window.electronAPI.invoke('translation:set-config', {
                 enabled: true,
                 sourceLanguage: translationPrefs.sourceLanguage || '',
@@ -408,6 +414,8 @@ export class AssistantApp extends LitElement {
             });
         } else {
             this.translationEnabled = false;
+            this._translationSourceLanguage = '';
+            this._translationTargetLanguage = '';
         }
 
         await assistant.initializeGemini(this.selectedProfile, this.selectedLanguage);
@@ -448,6 +456,8 @@ export class AssistantApp extends LitElement {
         // Configure translation if enabled in prep data
         if (prepData.translationEnabled && prepData.translationTargetLanguage) {
             this.translationEnabled = true;
+            this._translationSourceLanguage = prepData.translationSourceLanguage || '';
+            this._translationTargetLanguage = prepData.translationTargetLanguage || '';
             await window.electronAPI.invoke('translation:set-config', {
                 enabled: true,
                 sourceLanguage: prepData.translationSourceLanguage || '',
@@ -455,6 +465,8 @@ export class AssistantApp extends LitElement {
             });
         } else {
             this.translationEnabled = false;
+            this._translationSourceLanguage = '';
+            this._translationTargetLanguage = '';
         }
 
         await assistant.initializeGemini(this.selectedProfile, this.selectedLanguage, prepData);
@@ -622,6 +634,8 @@ export class AssistantApp extends LitElement {
                         .copilotActive=${this.copilotActive}
                         .copilotPrep=${this.copilotPrep}
                         .translationEnabled=${this.translationEnabled}
+                        .translationSourceLanguage=${this._translationSourceLanguage}
+                        .translationTargetLanguage=${this._translationTargetLanguage}
                         @response-index-changed=${this.handleResponseIndexChanged}
                         @notes-updated=${(e) => {
                         this.accumulatedNotes = e.detail.notes;

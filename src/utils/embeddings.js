@@ -15,6 +15,9 @@ async function generateEmbedding(apiKey, text) {
         model: EMBEDDING_MODEL,
         contents: text,
     });
+    if (!result?.embeddings?.[0]?.values) {
+        throw new Error('Invalid embedding response from API');
+    }
     return result.embeddings[0].values;
 }
 
@@ -41,6 +44,9 @@ async function generateEmbeddings(apiKey, texts) {
             )
         );
         for (const result of results) {
+            if (!result?.embeddings?.[0]?.values) {
+                throw new Error('Invalid embedding response from API');
+            }
             allEmbeddings.push(result.embeddings[0].values);
         }
     }

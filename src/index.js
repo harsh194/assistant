@@ -420,6 +420,7 @@ function setupGeneralIpcHandlers() {
 
             // Chunk and embed in background (non-blocking for the return value)
             let embeddingSuccess = false;
+            let embeddingError = null;
             try {
                 if (mainWindow) mainWindow.webContents.send('document-upload-progress', { stage: 'embedding' });
                 const apiKey = storage.getApiKey();
@@ -446,6 +447,7 @@ function setupGeneralIpcHandlers() {
                     }
                 }
             } catch (embError) {
+                embeddingError = embError.message;
                 console.warn('Embedding generation failed (document still usable):', embError.message);
             }
 
@@ -461,6 +463,7 @@ function setupGeneralIpcHandlers() {
                     mimeType: path.extname(filePath).toLowerCase(),
                     docId,
                     hasEmbeddings: embeddingSuccess,
+                    embeddingError,
                 }
             };
         } catch (error) {

@@ -8,6 +8,22 @@ const MAX_TEXT_LENGTH = 50000;
 
 const PLAIN_TEXT_EXTENSIONS = ['.txt', '.md', '.markdown'];
 
+function truncateAtBoundary(text, maxLength) {
+    if (text.length <= maxLength) return text;
+    const truncated = text.substring(0, maxLength);
+    // Try paragraph boundary
+    const lastPara = truncated.lastIndexOf('\n\n');
+    if (lastPara > maxLength * 0.8) {
+        return text.substring(0, lastPara) + '\n\n[Document truncated]';
+    }
+    // Try sentence boundary
+    const lastSentence = truncated.lastIndexOf('. ');
+    if (lastSentence > maxLength * 0.8) {
+        return text.substring(0, lastSentence + 1) + '\n\n[Document truncated]';
+    }
+    return truncated + '\n\n[Document truncated]';
+}
+
 const MIME_TYPES = {
     '.pdf': 'application/pdf',
     '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -27,9 +43,7 @@ function isPlainText(filePath) {
 function parsePlainText(filePath) {
     try {
         const content = fs.readFileSync(filePath, 'utf8');
-        const truncated = content.length > MAX_TEXT_LENGTH
-            ? content.substring(0, MAX_TEXT_LENGTH) + '\n\n[Document truncated]'
-            : content;
+        const truncated = truncateAtBoundary(content, MAX_TEXT_LENGTH);
         return { success: true, text: truncated };
     } catch (error) {
         return { success: false, text: '', error: error.message };
@@ -67,9 +81,7 @@ async function parseWithGeminiOCR(filePath) {
         });
 
         const text = response.text || '';
-        const truncated = text.length > MAX_TEXT_LENGTH
-            ? text.substring(0, MAX_TEXT_LENGTH) + '\n\n[Document truncated]'
-            : text;
+        const truncated = truncateAtBoundary(text, MAX_TEXT_LENGTH);
 
         return { success: true, text: truncated };
     } catch (error) {

@@ -17,6 +17,7 @@ let hiddenVideo = null;
 let offscreenCanvas = null;
 let offscreenContext = null;
 let currentImageQuality = 'medium'; // Store current image quality for manual screenshots
+let isAiBusy = false; // Track if AI is currently processing a response
 
 const isLinux = api.platform === 'linux';
 const isMacOS = api.platform === 'darwin';
@@ -212,6 +213,9 @@ async function initializeGemini(profile = 'interview', language = 'en-US', copil
 api.on('update-status', (status) => {
     console.log('Status update:', status);
     assistant.setStatus(status);
+    // Track busy state - skip auto-captures while AI is processing
+    const busyStatuses = ['thinking', 'Thinking...', 'streaming', 'sending', 'Sending...'];
+    isAiBusy = busyStatuses.some(s => status.toLowerCase().includes(s.toLowerCase()));
 });
 
 async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'medium') {
@@ -376,8 +380,23 @@ async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'mediu
             videoTrack: mediaStream.getVideoTracks()[0]?.getSettings(),
         });
 
-        // Manual mode only - screenshots captured on demand via shortcut
-        console.log('Manual mode enabled - screenshots will be captured on demand only');
+        // Check if auto screen capture is enabled
+        const prefs = preferencesCache || {};
+        const screenCaptureEnabled = prefs.screenCaptureEnabled ?? false;
+
+        if (screenCaptureEnabled) {
+            const intervalSec = prefs.screenCaptureInterval ?? 5;
+            console.log(`Auto screen capture enabled - capturing every ${intervalSec}s`);
+            screenshotInterval = setInterval(() => {
+                if (isAiBusy) {
+                    console.log('Skipping auto-capture - AI is busy processing');
+                    return;
+                }
+                captureScreenshot(imageQuality);
+            }, intervalSec * 1000);
+        } else {
+            console.log('Auto screen capture disabled - screenshots captured on demand only');
+        }
     } catch (err) {
         console.error('Error starting capture:', err);
         assistant.setStatus('error');
@@ -406,7 +425,7 @@ function setupLinuxMicProcessing(micStream) {
             api.invoke('send-mic-audio-content', {
                 data: base64Data,
                 mimeType: 'audio/pcm;rate=24000',
-            }).catch(() => {});
+            }).catch(err => console.warn('Failed to send mic audio:', err.message));
         }
     };
 
@@ -439,7 +458,7 @@ function setupLinuxSystemAudioProcessing() {
             api.invoke('send-audio-content', {
                 data: base64Data,
                 mimeType: 'audio/pcm;rate=24000',
-            }).catch(() => {});
+            }).catch(err => console.warn('Failed to send system audio:', err.message));
         }
     };
 
@@ -469,7 +488,7 @@ function setupWindowsLoopbackProcessing() {
             api.invoke('send-audio-content', {
                 data: base64Data,
                 mimeType: 'audio/pcm;rate=24000',
-            }).catch(() => {});
+            }).catch(err => console.warn('Failed to send loopback audio:', err.message));
         }
     };
 
@@ -509,11 +528,17 @@ async function captureScreenshot(imageQuality = 'medium', isManual = false) {
 
     offscreenContext.drawImage(hiddenVideo, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
 
-    // Check if image was drawn properly by sampling a pixel
-    const imageData = offscreenContext.getImageData(0, 0, 1, 1);
-    const isBlank = imageData.data.every((value, index) => {
-        // Check if all pixels are black (0,0,0) or transparent
-        return index === 3 ? true : value === 0;
+    // Check if image was drawn properly by sampling multiple pixels
+    const w = offscreenCanvas.width;
+    const h = offscreenCanvas.height;
+    const samplePoints = [
+        [0, 0], [w >> 1, 0], [w - 1, 0],
+        [0, h >> 1], [w >> 1, h >> 1], [w - 1, h >> 1],
+        [0, h - 1], [w >> 1, h - 1], [w - 1, h - 1],
+    ];
+    const isBlank = samplePoints.every(([x, y]) => {
+        const pixel = offscreenContext.getImageData(x, y, 1, 1).data;
+        return pixel[0] === 0 && pixel[1] === 0 && pixel[2] === 0;
     });
 
     if (isBlank) {
@@ -554,6 +579,7 @@ async function captureScreenshot(imageQuality = 'medium', isManual = false) {
 
                 const result = await api.invoke('send-image-content', {
                     data: base64data,
+                    prompt: MANUAL_SCREENSHOT_PROMPT,
                 });
 
                 if (result.success) {

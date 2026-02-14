@@ -491,6 +491,14 @@ export class HistoryView extends LitElement {
         resizeLayout();
     }
 
+    disconnectedCallback() {
+        super.disconnectedCallback();
+        if (this._deleteConfirmTimer) {
+            clearTimeout(this._deleteConfirmTimer);
+            this._deleteConfirmTimer = null;
+        }
+    }
+
     async loadSessions() {
         try {
             this.loading = true;
@@ -671,7 +679,9 @@ export class HistoryView extends LitElement {
             this.deleteConfirmId = null;
         } else {
             this.deleteConfirmId = sessionId;
-            setTimeout(() => {
+            if (this._deleteConfirmTimer) clearTimeout(this._deleteConfirmTimer);
+            this._deleteConfirmTimer = setTimeout(() => {
+                this._deleteConfirmTimer = null;
                 if (this.deleteConfirmId === sessionId) {
                     this.deleteConfirmId = null;
                     this.requestUpdate();

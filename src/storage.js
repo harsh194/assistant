@@ -275,8 +275,8 @@ function getTodayLimits() {
         return todayEntry;
     }
 
-    // No entry for today - clean old entries and create new one
-    limits.data = limits.data.filter(entry => entry.date === today);
+    // No entry for today - clear old entries and create new one
+    limits.data = [];
     const newEntry = {
         date: today,
         flash: { count: 0 },

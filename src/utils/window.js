@@ -440,6 +440,7 @@ function setupWindowIpcHandlers(mainWindow, sendToRenderer, geminiSessionRef) {
                 return { success: false, error: 'Window has been destroyed' };
             }
 
+            let viewName, layoutMode;
             try {
                 viewName = await event.sender.executeJavaScript('assistant.getCurrentView()');
                 layoutMode = await event.sender.executeJavaScript('assistant.getLayoutMode()');

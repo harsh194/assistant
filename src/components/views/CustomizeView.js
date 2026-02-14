@@ -539,6 +539,8 @@ export class CustomizeView extends LitElement {
         selectedProfile: { type: String },
         selectedLanguage: { type: String },
         selectedImageQuality: { type: String },
+        screenCaptureEnabled: { type: Boolean },
+        screenCaptureInterval: { type: Number },
         layoutMode: { type: String },
         keybinds: { type: Object },
         googleSearchEnabled: { type: Boolean },
@@ -567,6 +569,8 @@ export class CustomizeView extends LitElement {
         this.selectedProfile = 'interview';
         this.selectedLanguage = 'en-US';
         this.selectedImageQuality = 'medium';
+        this.screenCaptureEnabled = false;
+        this.screenCaptureInterval = 5;
         this.layoutMode = 'normal';
         this.keybinds = this.getDefaultKeybinds();
         this.onProfileChange = () => { };
@@ -692,6 +696,8 @@ export class CustomizeView extends LitElement {
                 assistant.storage.getCustomProfiles()
             ]);
 
+            this.screenCaptureEnabled = prefs.screenCaptureEnabled ?? false;
+            this.screenCaptureInterval = prefs.screenCaptureInterval ?? 5;
             this.googleSearchEnabled = prefs.googleSearchEnabled ?? true;
             this.backgroundTransparency = prefs.backgroundTransparency ?? 0.8;
             this.fontSize = prefs.fontSize ?? 20;
@@ -864,6 +870,18 @@ export class CustomizeView extends LitElement {
     handleImageQualitySelect(e) {
         this.selectedImageQuality = e.target.value;
         this.onImageQualityChange(e.target.value);
+    }
+
+    async handleScreenCaptureEnabledChange(e) {
+        this.screenCaptureEnabled = e.target.checked;
+        await assistant.storage.updatePreference('screenCaptureEnabled', this.screenCaptureEnabled);
+        this.requestUpdate();
+    }
+
+    async handleScreenCaptureIntervalChange(e) {
+        this.screenCaptureInterval = parseInt(e.target.value, 10);
+        await assistant.storage.updatePreference('screenCaptureInterval', this.screenCaptureInterval);
+        this.requestUpdate();
     }
 
     handleLayoutModeSelect(e) {
@@ -1426,7 +1444,44 @@ export class CustomizeView extends LitElement {
         return html`
             <div class="content-header">Screen Capture</div>
             <div class="form-grid">
-                <div class="form-group">
+                <div class="checkbox-group">
+                    <input
+                        type="checkbox"
+                        class="checkbox-input"
+                        id="screen-capture-enabled"
+                        .checked=${this.screenCaptureEnabled}
+                        @change=${this.handleScreenCaptureEnabledChange}
+                    />
+                    <label for="screen-capture-enabled" class="checkbox-label">Enable Auto Screen Capture</label>
+                </div>
+                <div class="form-description" style="margin-left: 24px; margin-top: -8px;">
+                    Automatically capture screenshots at regular intervals during a session for AI analysis.
+                    <br /><strong>Note:</strong> When disabled, you can still capture manually using the keyboard shortcut.
+                </div>
+
+                ${this.screenCaptureEnabled ? html`
+                    <div class="form-group" style="margin-top: 4px;">
+                        <label class="form-label">
+                            Capture Interval
+                            <span class="current-selection">${this.screenCaptureInterval >= 60 ? `${this.screenCaptureInterval / 60}m` : `${this.screenCaptureInterval}s`}</span>
+                        </label>
+                        <select class="form-control" .value=${String(this.screenCaptureInterval)} @change=${this.handleScreenCaptureIntervalChange}>
+                            <option value="3" ?selected=${this.screenCaptureInterval === 3}>Every 3 seconds</option>
+                            <option value="5" ?selected=${this.screenCaptureInterval === 5}>Every 5 seconds</option>
+                            <option value="10" ?selected=${this.screenCaptureInterval === 10}>Every 10 seconds</option>
+                            <option value="15" ?selected=${this.screenCaptureInterval === 15}>Every 15 seconds</option>
+                            <option value="30" ?selected=${this.screenCaptureInterval === 30}>Every 30 seconds</option>
+                            <option value="60" ?selected=${this.screenCaptureInterval === 60}>Every 60 seconds</option>
+                            <option value="300" ?selected=${this.screenCaptureInterval === 300}>Every 5 minutes</option>
+                            <option value="600" ?selected=${this.screenCaptureInterval === 600}>Every 10 minutes</option>
+                        </select>
+                        <div class="form-description">
+                            How often the screen is captured and sent to the AI. Shorter intervals use more tokens.
+                        </div>
+                    </div>
+                ` : ''}
+
+                <div class="form-group" style="margin-top: 4px;">
                     <label class="form-label">
                         Image Quality
                         <span class="current-selection">${this.selectedImageQuality.charAt(0).toUpperCase() + this.selectedImageQuality.slice(1)}</span>

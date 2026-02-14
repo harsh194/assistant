@@ -206,7 +206,6 @@ export class MainView extends LitElement {
         }
 
         .translation-section {
-            margin-top: 14px;
             border: 1px solid var(--border-color);
             border-radius: var(--border-radius);
             padding: 10px 14px;
@@ -219,6 +218,8 @@ export class MainView extends LitElement {
         }
 
         .translation-toggle input[type="checkbox"] {
+            width: auto;
+            padding: 0;
             cursor: pointer;
             accent-color: var(--btn-primary-bg);
         }
@@ -499,9 +500,8 @@ export class MainView extends LitElement {
                             </select>
                         </div>
                     ` : ''}
-                </div>
 
-                <div class="translation-section">
+                    <div class="translation-section">
                     <div class="translation-toggle">
                         <input
                             type="checkbox"
@@ -550,6 +550,7 @@ export class MainView extends LitElement {
                             </div>
                         </div>
                     ` : ''}
+                    </div>
                 </div>
 
                 <div class="shortcut-hint">${shortcut} to start</div>

@@ -32,6 +32,7 @@ module.exports.formatSpeakerResults = formatSpeakerResults;
 // Audio capture variables
 let systemAudioProc = null;
 let messageBuffer = '';
+let responseInactivityTimer = null;
 
 // Translation pipeline variables
 let translationEnabled = false;
@@ -48,7 +49,7 @@ let translationApiKey = null;
 let translationClient = null;
 
 const VALID_LANG_CODES = new Set([
-    '', 'en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'zh', 'ja', 'ko',
+    'en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'zh', 'ja', 'ko',
     'ar', 'hi', 'tr', 'nl', 'pl', 'sv', 'da', 'fi', 'no', 'th',
     'vi', 'id', 'ms', 'uk', 'cs', 'ro', 'el', 'he'
 ]);
@@ -136,7 +137,7 @@ function saveScreenAnalysis(prompt, response, model) {
     };
 
     screenAnalysisHistory.push(analysisEntry);
-    console.log('Saved screen analysis:', analysisEntry);
+    console.log('Saved screen analysis for model:', model);
 
     // Send to renderer to save
     sendToRenderer('save-screen-analysis', {
@@ -203,6 +204,50 @@ async function getStoredSetting(key, defaultValue) {
     return defaultValue;
 }
 
+function finalizeResponse() {
+    if (responseInactivityTimer) {
+        clearTimeout(responseInactivityTimer);
+        responseInactivityTimer = null;
+    }
+    if (messageBuffer.trim() === '') return;
+
+    sendToRenderer('update-response', messageBuffer);
+
+    // Save conversation turn
+    if (currentTranscription) {
+        saveConversationTurn(currentTranscription, messageBuffer);
+        currentTranscription = '';
+    }
+
+    sendToRenderer('response-complete', { source: 'live-session' });
+
+    // Dynamic RAG: retrieve and inject relevant document context
+    if (retrievalEngine && retrievalEngine.canRetrieve() && conversationHistory.length > 0) {
+        const recentTurns = conversationHistory.slice(-3);
+        const engine = retrievalEngine;
+        engine.retrieve(recentTurns).then(chunks => {
+            if (chunks.length > 0 && global.geminiSessionRef?.current) {
+                const contextText = engine.formatContextInjection(chunks);
+                global.geminiSessionRef.current.sendClientContent({
+                    turns: [{ role: 'user', parts: [{ text: contextText }] }],
+                    turnComplete: false,
+                }).catch(err => console.warn('RAG injection failed:', err.message));
+            }
+        }).catch(err => console.warn('RAG retrieval error:', err.message));
+    }
+
+    messageBuffer = '';
+    sendToRenderer('update-status', 'Listening...');
+}
+
+function resetResponseInactivityTimer() {
+    if (responseInactivityTimer) clearTimeout(responseInactivityTimer);
+    responseInactivityTimer = setTimeout(() => {
+        responseInactivityTimer = null;
+        finalizeResponse();
+    }, 2000);
+}
+
 async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'interview', language = 'en-US', isReconnect = false, copilotPrep = null, customProfileData = null) {
     if (isInitializingSession) {
         console.log('Session initialization already in progress');
@@ -256,8 +301,6 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
                     sendToRenderer('update-status', 'Live session connected');
                 },
                 onmessage: function (message) {
-                    console.log('----------------', message);
-
                     // Handle input transcription (what was spoken)
                     if (message.serverContent?.inputTranscription?.results) {
                         const formattedText = formatSpeakerResults(message.serverContent.inputTranscription.results);
@@ -277,47 +320,32 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
                         }
                     }
 
+                    // Handle model text response (from sendClientContent text input)
+                    if (message.serverContent?.modelTurn?.parts) {
+                        for (const part of message.serverContent.modelTurn.parts) {
+                            if (part.text && part.text.trim() !== '') {
+                                const isNewResponse = messageBuffer === '';
+                                messageBuffer += part.text;
+                                sendToRenderer(isNewResponse ? 'new-response' : 'update-response', messageBuffer);
+                                resetResponseInactivityTimer();
+                            }
+                        }
+                    }
+
                     // Handle AI model response via output transcription (native audio model)
                     if (message.serverContent?.outputTranscription?.text) {
                         const text = message.serverContent.outputTranscription.text;
-                        if (text.trim() === '') return; // Ignore empty transcriptions
-                        const isNewResponse = messageBuffer === '';
-                        messageBuffer += text;
-                        sendToRenderer(isNewResponse ? 'new-response' : 'update-response', messageBuffer);
-                    }
-
-                    if (message.serverContent?.generationComplete) {
-                        // Only send/save if there's actual content
-                        if (messageBuffer.trim() !== '') {
-                            sendToRenderer('update-response', messageBuffer);
-
-                            // Save conversation turn when we have both transcription and AI response
-                            if (currentTranscription) {
-                                saveConversationTurn(currentTranscription, messageBuffer);
-                                currentTranscription = ''; // Reset for next turn
-                            }
-
-                            // Notify renderer that response generation is complete
-                            sendToRenderer('response-complete', { source: 'live-session' });
-
-                            // Dynamic RAG: retrieve and inject relevant document context
-                            if (retrievalEngine && retrievalEngine.canRetrieve() && conversationHistory.length > 0) {
-                                const recentTurns = conversationHistory.slice(-3);
-                                const engine = retrievalEngine; // capture reference before async
-                                engine.retrieve(recentTurns).then(chunks => {
-                                    if (chunks.length > 0 && global.geminiSessionRef?.current) {
-                                        const contextText = engine.formatContextInjection(chunks);
-                                        global.geminiSessionRef.current.sendRealtimeInput({ text: contextText })
-                                            .catch(err => console.warn('RAG injection failed:', err.message));
-                                    }
-                                }).catch(err => console.warn('RAG retrieval error:', err.message));
-                            }
+                        if (text.trim() !== '') {
+                            const isNewResponse = messageBuffer === '';
+                            messageBuffer += text;
+                            sendToRenderer(isNewResponse ? 'new-response' : 'update-response', messageBuffer);
+                            resetResponseInactivityTimer();
                         }
-                        messageBuffer = '';
                     }
 
+                    // turnComplete is the primary finalization signal
                     if (message.serverContent?.turnComplete) {
-                        sendToRenderer('update-status', 'Listening...');
+                        finalizeResponse();
                     }
                 },
                 onerror: function (e) {
@@ -380,9 +408,13 @@ async function attemptReconnect() {
     reconnectAttempts++;
     console.log(`Reconnection attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`);
 
-    // Clear stale buffers
+    // Clear stale buffers and timers
     messageBuffer = '';
     currentTranscription = '';
+    if (responseInactivityTimer) {
+        clearTimeout(responseInactivityTimer);
+        responseInactivityTimer = null;
+    }
 
     sendToRenderer('update-status', `Reconnecting... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
 
@@ -559,7 +591,9 @@ function convertStereoToMono(stereoBuffer) {
 
     for (let i = 0; i < samples; i++) {
         const leftSample = stereoBuffer.readInt16LE(i * 4);
-        monoBuffer.writeInt16LE(leftSample, i * 2);
+        const rightSample = stereoBuffer.readInt16LE(i * 4 + 2);
+        const monoSample = Math.round((leftSample + rightSample) / 2);
+        monoBuffer.writeInt16LE(monoSample, i * 2);
     }
 
     return monoBuffer;
@@ -598,6 +632,8 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
         return { success: false, error: 'No API key configured' };
     }
 
+    const effectivePrompt = prompt || 'Describe what you see on the screen. If there is a question, answer it directly.';
+
     try {
         const ai = new GoogleGenAI({ apiKey: apiKey });
 
@@ -608,7 +644,7 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
                     data: base64Data,
                 },
             },
-            { text: prompt },
+            { text: effectivePrompt },
         ];
 
         console.log(`Sending image to ${model} (streaming)...`);
@@ -636,7 +672,7 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
         console.log(`Image response completed from ${model}`);
 
         // Save screen analysis to history
-        saveScreenAnalysis(prompt, fullText, model);
+        saveScreenAnalysis(effectivePrompt, fullText, model);
 
         // Notify renderer that response is complete
         sendToRenderer('response-complete', { model: model });
@@ -651,9 +687,9 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
 // Translation engine functions
 function setTranslationConfig(config) {
     if (!config || typeof config !== 'object') return;
-    const source = String(config.sourceLanguage || '');
-    const target = String(config.targetLanguage || '');
-    if (!VALID_LANG_CODES.has(source) || !VALID_LANG_CODES.has(target)) {
+    const source = String(config.sourceLanguage || '').trim();
+    const target = String(config.targetLanguage || '').trim();
+    if (!source || !target || !VALID_LANG_CODES.has(source) || !VALID_LANG_CODES.has(target)) {
         console.warn('Invalid translation language codes:', source, target);
         return;
     }
@@ -888,8 +924,11 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
                 return { success: false, error: 'Invalid text message' };
             }
 
-            console.log('Sending text message:', text);
-            await geminiSessionRef.current.sendRealtimeInput({ text: text.trim() });
+            console.log('Sending text message:', text.trim());
+            await geminiSessionRef.current.sendClientContent({
+                turns: [{ role: 'user', parts: [{ text: text.trim() }] }],
+                turnComplete: true,
+            });
             return { success: true };
         } catch (error) {
             console.error('Error sending text:', error);

@@ -315,7 +315,8 @@ export class OnboardingView extends LitElement {
         this.resizeCanvas();
         this.startGradientAnimation();
 
-        window.addEventListener('resize', () => this.resizeCanvas());
+        this._resizeHandler = () => this.resizeCanvas();
+        window.addEventListener('resize', this._resizeHandler);
     }
 
     disconnectedCallback() {
@@ -323,7 +324,7 @@ export class OnboardingView extends LitElement {
         if (this.animationId) {
             cancelAnimationFrame(this.animationId);
         }
-        window.removeEventListener('resize', () => this.resizeCanvas());
+        window.removeEventListener('resize', this._resizeHandler);
     }
 
     resizeCanvas() {

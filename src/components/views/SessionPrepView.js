@@ -564,10 +564,15 @@ export class SessionPrepView extends LitElement {
             createdAt: Date.now(),
         };
 
-        await assistant.storage.saveTemplate(template);
-        this._templateName = '';
-        this._templateSaved = true;
-        setTimeout(() => { this._templateSaved = false; }, 2000);
+        try {
+            await assistant.storage.saveTemplate(template);
+            this._templateName = '';
+            this._templateSaved = true;
+            setTimeout(() => { this._templateSaved = false; }, 2000);
+        } catch (err) {
+            console.error('Failed to save template:', err);
+            this._templateSaved = false;
+        }
     }
 
     render() {

@@ -25,31 +25,85 @@ export class SessionSummaryView extends LitElement {
         /* ---- Header ---- */
         .header {
             margin-bottom: 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .completion-badge {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(76, 175, 80, 0.12);
+            border: 1.5px solid rgba(76, 175, 80, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .completion-badge svg {
+            width: 16px;
+            height: 16px;
+            color: #4caf50;
         }
 
         .header-title {
             font-size: 16px;
             font-weight: 600;
             color: var(--text-color);
-            margin-bottom: 10px;
         }
 
-        .goal-row {
+        .goal-fields {
             display: flex;
-            align-items: baseline;
-            gap: 6px;
-            font-size: 12px;
-            margin-bottom: 4px;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .goal-card {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 12px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .goal-icon {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+            margin-top: 1px;
+            color: var(--text-muted);
+        }
+
+        .goal-content {
+            flex: 1;
+            min-width: 0;
         }
 
         .goal-label {
+            font-size: 10px;
             font-weight: 600;
-            color: var(--text-color);
-            white-space: nowrap;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 3px;
         }
 
         .goal-value {
-            color: var(--text-secondary);
+            font-size: 13px;
+            color: var(--text-color);
+            line-height: 1.4;
         }
 
         /* ---- Cards ---- */
@@ -450,25 +504,34 @@ export class SessionSummaryView extends LitElement {
 
         return html`
             <!-- Header with goal info -->
-            ${this.copilotPrep?.goal ? html`
-                <div class="header">
-                    <div class="header-title">Session Complete</div>
-                    <div class="goal-row">
-                        <span class="goal-label">Goal:</span>
-                        <span class="goal-value">${this.copilotPrep.goal}</span>
+            <div class="header">
+                <div class="header-top">
+                    <div class="completion-badge">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                     </div>
-                    ${this.copilotPrep.desiredOutcome ? html`
-                        <div class="goal-row">
-                            <span class="goal-label">Outcome:</span>
-                            <span class="goal-value">${this.copilotPrep.desiredOutcome}</span>
-                        </div>
-                    ` : ''}
-                </div>
-            ` : html`
-                <div class="header">
                     <div class="header-title">Session Complete</div>
                 </div>
-            `}
+                ${this.copilotPrep?.goal ? html`
+                    <div class="goal-fields">
+                        <div class="goal-card">
+                            <svg class="goal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+                            <div class="goal-content">
+                                <div class="goal-label">Goal</div>
+                                <div class="goal-value">${this.copilotPrep.goal}</div>
+                            </div>
+                        </div>
+                        ${this.copilotPrep.desiredOutcome ? html`
+                            <div class="goal-card">
+                                <svg class="goal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                <div class="goal-content">
+                                    <div class="goal-label">Outcome</div>
+                                    <div class="goal-value">${this.copilotPrep.desiredOutcome}</div>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : ''}
+            </div>
 
             <!-- Actions -->
             <div class="actions">
