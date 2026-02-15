@@ -2,8 +2,8 @@ const { GoogleGenAI, Modality } = require('@google/genai');
 const { BrowserWindow, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const { saveDebugAudio } = require('../audioUtils');
-const { getSystemPrompt } = require('./prompts');
-const { getAvailableModel, incrementLimitCount, getApiKey, getAllEmbeddings } = require('../storage');
+const { getSystemPrompt, getLanguageName } = require('./prompts');
+const { getAvailableModel, incrementLimitCount, getApiKey, getAllEmbeddings, getPreferences } = require('../storage');
 const { RetrievalEngine } = require('./retrieval');
 
 // Conversation tracking variables
@@ -189,50 +189,15 @@ function getCurrentSessionData() {
 
 async function getEnabledTools() {
     const tools = [];
-
-    // Check if Google Search is enabled (default: true)
-    const googleSearchEnabled = await getStoredSetting('googleSearchEnabled', 'true');
-    console.log('Google Search enabled:', googleSearchEnabled);
-
-    if (googleSearchEnabled === 'true') {
-        tools.push({ googleSearch: {} });
-        console.log('Added Google Search tool');
-    } else {
-        console.log('Google Search tool disabled');
-    }
-
-    return tools;
-}
-
-async function getStoredSetting(key, defaultValue) {
     try {
-        const windows = BrowserWindow.getAllWindows();
-        if (windows.length > 0) {
-
-            // Try to get setting from renderer process localStorage
-            const value = await windows[0].webContents.executeJavaScript(`
-                (function() {
-                    try {
-                        if (typeof localStorage === 'undefined') {
-                            console.log('localStorage not available yet for ${key}');
-                            return '${defaultValue}';
-                        }
-                        const stored = localStorage.getItem('${key}');
-                        console.log('Retrieved setting ${key}:', stored);
-                        return stored || '${defaultValue}';
-                    } catch (e) {
-                        console.error('Error accessing localStorage for ${key}:', e);
-                        return '${defaultValue}';
-                    }
-                })()
-            `);
-            return value;
+        const prefs = getPreferences();
+        if (prefs.googleSearchEnabled) {
+            tools.push({ googleSearch: {} });
         }
-    } catch (error) {
-        console.error('Error getting stored setting for', key, ':', error.message);
+    } catch (e) {
+        // Default to no tools if preferences unavailable
     }
-    console.log('Using default value for', key, ':', defaultValue);
-    return defaultValue;
+    return tools;
 }
 
 function finalizeResponse() {
@@ -240,7 +205,12 @@ function finalizeResponse() {
         clearTimeout(responseInactivityTimer);
         responseInactivityTimer = null;
     }
-    if (messageBuffer.trim() === '') return;
+
+    // Always reset UI state even if buffer is empty (e.g., only thinking text was filtered out)
+    if (messageBuffer.trim() === '') {
+        sendToRenderer('update-status', 'Listening...');
+        return;
+    }
 
     sendToRenderer('update-response', messageBuffer);
 
@@ -276,7 +246,7 @@ function resetResponseInactivityTimer() {
     responseInactivityTimer = setTimeout(() => {
         responseInactivityTimer = null;
         finalizeResponse();
-    }, 2000);
+    }, 500);
 }
 
 async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'interview', language = 'en-US', isReconnect = false, copilotPrep = null, customProfileData = null, options = {}) {
@@ -322,8 +292,8 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
     const allEmbeddings = copilotPrep?.referenceDocuments?.length > 0 ? getAllEmbeddings() : [];
     const hasEmbeddings = allEmbeddings.length > 0;
     const systemPrompt = suppressAssistantResponses
-        ? getSystemPrompt(profile, customPrompt, googleSearchEnabled, copilotPrep, customProfileData, hasEmbeddings, true)
-        : getSystemPrompt(profile, customPrompt, googleSearchEnabled, copilotPrep, customProfileData, hasEmbeddings);
+        ? getSystemPrompt(profile, customPrompt, googleSearchEnabled, copilotPrep, customProfileData, hasEmbeddings, true, language)
+        : getSystemPrompt(profile, customPrompt, googleSearchEnabled, copilotPrep, customProfileData, hasEmbeddings, false, language);
 
     // Initialize retrieval engine if embeddings available
     if (!isReconnect && hasEmbeddings) {
@@ -365,9 +335,11 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
                     }
 
                     // Handle model text response (from sendClientContent text input)
+                    // Skip thinking/reasoning parts (part.thought === true) as they are
+                    // internal chain-of-thought and always in English regardless of language setting
                     if (!suppressAssistantResponses && message.serverContent?.modelTurn?.parts) {
                         for (const part of message.serverContent.modelTurn.parts) {
-                            if (part.text && part.text.trim() !== '') {
+                            if (part.text && part.text.trim() !== '' && !part.thought) {
                                 const isNewResponse = messageBuffer === '';
                                 messageBuffer += part.text;
                                 sendToRenderer(isNewResponse ? 'new-response' : 'update-response', messageBuffer);
@@ -656,7 +628,6 @@ async function sendAudioToGemini(base64Data, geminiSessionRef) {
     if (!geminiSessionRef.current) return;
 
     try {
-        process.stdout.write('.');
         await geminiSessionRef.current.sendRealtimeInput({
             audio: {
                 data: base64Data,
@@ -679,6 +650,16 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
 
     const effectivePrompt = prompt || 'Describe what you see on the screen. If there is a question, answer it directly.';
 
+    // Determine response language from session or preferences
+    let lang = sessionParams?.language || null;
+    if (!lang) {
+        try { lang = getPreferences().selectedLanguage || null; } catch (e) { console.warn('Failed to read language preference:', e.message); }
+    }
+    const langName = getLanguageName(lang);
+    const finalPrompt = (langName && lang && !lang.startsWith('en'))
+        ? effectivePrompt + `\n\nIMPORTANT: You MUST respond entirely in ${langName}.`
+        : effectivePrompt;
+
     try {
         const ai = new GoogleGenAI({ apiKey: apiKey });
 
@@ -689,7 +670,7 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
                     data: base64Data,
                 },
             },
-            { text: effectivePrompt },
+            { text: finalPrompt },
         ];
 
         console.log(`Sending image to ${model} (streaming)...`);
@@ -1042,7 +1023,6 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     ipcMain.handle('send-audio-content', async (event, { data, mimeType }) => {
         if (!geminiSessionRef.current) return { success: false, error: 'No active Gemini session' };
         try {
-            process.stdout.write('.');
             await geminiSessionRef.current.sendRealtimeInput({
                 audio: { data: data, mimeType: mimeType },
             });
@@ -1057,7 +1037,6 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     ipcMain.handle('send-mic-audio-content', async (event, { data, mimeType }) => {
         if (!geminiSessionRef.current) return { success: false, error: 'No active Gemini session' };
         try {
-            process.stdout.write(',');
             await geminiSessionRef.current.sendRealtimeInput({
                 audio: { data: data, mimeType: mimeType },
             });
@@ -1081,8 +1060,6 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
                 console.error(`Image buffer too small: ${buffer.length} bytes`);
                 return { success: false, error: 'Image buffer too small' };
             }
-
-            process.stdout.write('!');
 
             // Use HTTP API instead of realtime session
             const result = await sendImageToGeminiHttp(data, prompt);
@@ -1298,7 +1275,6 @@ Keep it concise and actionable. Use plain text, no markdown.`;
 module.exports = {
     initializeGeminiSession,
     getEnabledTools,
-    getStoredSetting,
     sendToRenderer,
     initializeNewSession,
     saveConversationTurn,

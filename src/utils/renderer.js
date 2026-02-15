@@ -8,10 +8,8 @@ let audioProcessor = null;
 let micAudioProcessor = null;
 let audioBuffer = [];
 const SAMPLE_RATE = 24000;
-// const AUDIO_CHUNK_DURATION = 0.1; // seconds
-const AUDIO_CHUNK_DURATION = 0.05; // seconds
-// const BUFFER_SIZE = 4096; // Increased buffer size for smoother audio
-const BUFFER_SIZE = 2048; // Increased buffer size for smoother audio
+const AUDIO_CHUNK_DURATION = 0.04; // 40ms chunks for lower latency
+const BUFFER_SIZE = 1024; // Smaller buffer for ~42ms callback intervals
 
 let hiddenVideo = null;
 let offscreenCanvas = null;
