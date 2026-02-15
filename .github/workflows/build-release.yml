@@ -20,9 +20,6 @@ jobs:
           - os: macos-latest
             platform: darwin
             arch: arm64
-          - os: macos-13
-            platform: darwin
-            arch: x64
           - os: windows-latest
             platform: win32
             arch: x64
@@ -95,7 +92,6 @@ jobs:
 
             ### macOS
             - **Apple Silicon (M1/M2/M3)**: Download `Assistant-darwin-arm64.zip`
-            - **Intel Mac**: Download `Assistant-darwin-x64.zip`
 
             ### Windows
             - Download `Assistant-win32-x64.zip`
