@@ -122,6 +122,7 @@ export class AssistantApp extends LitElement {
         _translationSourceLanguage: { state: true },
         _translationTargetLanguage: { state: true },
         screenAnalyses: { type: Array },
+        selectedFeatures: { type: Object },
     };
 
     constructor() {
@@ -156,6 +157,7 @@ export class AssistantApp extends LitElement {
         this.screenAnalyses = [];
         this._translationSourceLanguage = '';
         this._translationTargetLanguage = '';
+        this.selectedFeatures = { assistant: true, translation: false, screenAnalysis: false };
 
         // Load from storage
         this._loadFromStorage();
@@ -346,7 +348,7 @@ export class AssistantApp extends LitElement {
         } else if (this.currentView === 'assistant') {
             // Grab accumulated notes from the assistant view before closing
             const assistantView = this.shadowRoot.querySelector('assistant-view');
-            if (assistantView && this.copilotActive) {
+            if (assistantView && this.copilotActive && this.selectedFeatures.assistant) {
                 this.accumulatedNotes = assistantView.getSessionNotes();
             }
 
@@ -359,9 +361,10 @@ export class AssistantApp extends LitElement {
             }
 
             // Close the session and save co-pilot data if active
+            const hasLiveSession = this.selectedFeatures.assistant || this.selectedFeatures.translation;
             if (window.electronAPI) {
                 // Save co-pilot data to the session before closing
-                if (this.copilotActive) {
+                if (this.copilotActive && hasLiveSession) {
                     const sessionData = await window.electronAPI.invoke('get-current-session');
                     if (sessionData.success && sessionData.data.sessionId) {
                         this._copilotSessionId = sessionData.data.sessionId;
@@ -372,14 +375,20 @@ export class AssistantApp extends LitElement {
                     }
                 }
 
-                await window.electronAPI.invoke('close-session');
+                // Only close Gemini session if one was started
+                if (hasLiveSession) {
+                    await window.electronAPI.invoke('close-session');
+                }
             }
             this.sessionActive = false;
 
-            // Navigate to summary view for co-pilot sessions, otherwise back to main
-            if (this.copilotActive) {
+            // Navigate to summary view for co-pilot sessions with assistant, otherwise back to main
+            if (this.copilotActive && this.selectedFeatures.assistant) {
                 this.currentView = 'session-summary';
             } else {
+                this.copilotActive = false;
+                this.copilotPrep = null;
+                this.selectedFeatures = { assistant: true, translation: false, screenAnalysis: false };
                 this.currentView = 'main';
             }
             console.log('Session closed');
@@ -397,6 +406,7 @@ export class AssistantApp extends LitElement {
             this.copilotPrep = null;
             this.accumulatedNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
             this._copilotSessionId = null;
+            this.selectedFeatures = { assistant: true, translation: false, screenAnalysis: false };
             this.currentView = 'main';
         } else {
             // Quit the entire application
@@ -413,7 +423,7 @@ export class AssistantApp extends LitElement {
     }
 
     // Main view event handlers
-    async handleStart() {
+    async handleStart(features) {
         // check if api key is empty do nothing
         const apiKey = await assistant.storage.getApiKey();
         if (!apiKey || apiKey === '') {
@@ -425,28 +435,40 @@ export class AssistantApp extends LitElement {
             return;
         }
 
-        // Check translation config from preferences
-        const translationPrefs = await assistant.storage.getTranslationConfig();
-        if (translationPrefs.enabled && translationPrefs.targetLanguage) {
-            this.translationEnabled = true;
-            this._translationSourceLanguage = translationPrefs.sourceLanguage || '';
-            this._translationTargetLanguage = translationPrefs.targetLanguage || '';
-            await window.electronAPI.invoke('translation:set-config', {
-                enabled: true,
-                sourceLanguage: translationPrefs.sourceLanguage || '',
-                targetLanguage: translationPrefs.targetLanguage,
-            });
+        // Store selected features
+        this.selectedFeatures = features || { assistant: true, translation: false, screenAnalysis: false };
+
+        // Configure translation if feature selected
+        if (this.selectedFeatures.translation) {
+            const translationPrefs = await assistant.storage.getTranslationConfig();
+            if (translationPrefs.targetLanguage) {
+                this.translationEnabled = true;
+                this._translationSourceLanguage = translationPrefs.sourceLanguage || '';
+                this._translationTargetLanguage = translationPrefs.targetLanguage || '';
+                await window.electronAPI.invoke('translation:set-config', {
+                    enabled: true,
+                    sourceLanguage: translationPrefs.sourceLanguage || '',
+                    targetLanguage: translationPrefs.targetLanguage,
+                });
+            }
         } else {
             this.translationEnabled = false;
             this._translationSourceLanguage = '';
             this._translationTargetLanguage = '';
         }
 
-        await assistant.initializeGemini(this.selectedProfile, this.selectedLanguage);
-        // Pass the screenshot interval as string (including 'manual' option)
-        assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
+        // Only start Gemini live session if assistant or translation is needed
+        if (this.selectedFeatures.assistant || this.selectedFeatures.translation) {
+            const options = this.selectedFeatures.assistant ? {} : { suppressAssistant: true };
+            await assistant.initializeGemini(this.selectedProfile, this.selectedLanguage, null, options);
+            assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
+        } else if (this.selectedFeatures.screenAnalysis) {
+            // Screen-only mode: no live session, no audio
+            assistant.startCaptureScreenOnly(this.selectedImageQuality);
+        }
+
         this.responses = [];
-        this.screenAnalyses = []; // Reset screen analyses for new session
+        this.screenAnalyses = [];
         this.currentResponseIndex = -1;
         this.startTime = Date.now();
         this.currentView = 'assistant';
@@ -478,8 +500,12 @@ export class AssistantApp extends LitElement {
         this.copilotPrep = prepData;
         this.accumulatedNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
 
-        // Configure translation if enabled in prep data
-        if (prepData.translationEnabled && prepData.translationTargetLanguage) {
+        // Extract features from prep data
+        const features = prepData.selectedFeatures || { assistant: true, translation: false, screenAnalysis: false };
+        this.selectedFeatures = features;
+
+        // Configure translation if feature selected
+        if (features.translation && prepData.translationTargetLanguage) {
             this.translationEnabled = true;
             this._translationSourceLanguage = prepData.translationSourceLanguage || '';
             this._translationTargetLanguage = prepData.translationTargetLanguage || '';
@@ -494,10 +520,17 @@ export class AssistantApp extends LitElement {
             this._translationTargetLanguage = '';
         }
 
-        await assistant.initializeGemini(this.selectedProfile, this.selectedLanguage, prepData);
-        assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
+        // Only start Gemini live session if assistant or translation is needed
+        if (features.assistant || features.translation) {
+            const options = features.assistant ? {} : { suppressAssistant: true };
+            await assistant.initializeGemini(this.selectedProfile, this.selectedLanguage, prepData, options);
+            assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
+        } else if (features.screenAnalysis) {
+            assistant.startCaptureScreenOnly(this.selectedImageQuality);
+        }
+
         this.responses = [];
-        this.screenAnalyses = []; // Reset screen analyses for new session
+        this.screenAnalyses = [];
         this.currentResponseIndex = -1;
         this.startTime = Date.now();
         this.currentView = 'assistant';
@@ -608,7 +641,7 @@ export class AssistantApp extends LitElement {
             case 'main':
                 return html`
                     <main-view
-                        .onStart=${() => this.handleStart()}
+                        .onStart=${(features) => this.handleStart(features)}
                         .onPrepare=${() => this.handlePrepareClick()}
                         .onUseTemplate=${template => this.handleUseTemplate(template)}
                         .onAPIKeyHelp=${() => this.handleAPIKeyHelp()}
@@ -663,6 +696,7 @@ export class AssistantApp extends LitElement {
                         .translationSourceLanguage=${this._translationSourceLanguage}
                         .translationTargetLanguage=${this._translationTargetLanguage}
                         .screenAnalyses=${this.screenAnalyses}
+                        .selectedFeatures=${this.selectedFeatures}
                         @response-index-changed=${this.handleResponseIndexChanged}
                         @notes-updated=${(e) => {
                         this.accumulatedNotes = e.detail.notes;

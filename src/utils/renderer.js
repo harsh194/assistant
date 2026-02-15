@@ -197,7 +197,7 @@ function arrayBufferToBase64(buffer) {
     return btoa(binary);
 }
 
-async function initializeGemini(profile = 'interview', language = 'en-US', copilotPrep = null) {
+async function initializeGemini(profile = 'interview', language = 'en-US', copilotPrep = null, options = {}) {
     const apiKey = await storage.getApiKey();
     if (apiKey) {
         const prefs = await storage.getPreferences();
@@ -207,7 +207,7 @@ async function initializeGemini(profile = 'interview', language = 'en-US', copil
             const profileId = profile.replace('custom-', '');
             customProfileData = customProfiles.find(p => p.id === profileId) || null;
         }
-        const success = await api.invoke('initialize-gemini', apiKey, prefs.customPrompt || '', profile, language, copilotPrep, customProfileData);
+        const success = await api.invoke('initialize-gemini', apiKey, prefs.customPrompt || '', profile, language, copilotPrep, customProfileData, options);
         if (success) {
             assistant.setStatus('Live');
         } else {
@@ -406,6 +406,44 @@ async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'mediu
         }
     } catch (err) {
         console.error('Error starting capture:', err);
+        assistant.setStatus('error');
+    }
+}
+
+async function startCaptureScreenOnly(imageQuality = 'medium') {
+    currentImageQuality = imageQuality;
+    await loadPreferencesCache();
+
+    try {
+        mediaStream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+                frameRate: 1,
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+            },
+            audio: false,
+        });
+
+        console.log('Screen-only capture started (no audio)');
+
+        const prefs = preferencesCache || {};
+        const screenCaptureEnabled = prefs.screenCaptureEnabled ?? false;
+
+        if (screenCaptureEnabled) {
+            const intervalSec = prefs.screenCaptureInterval ?? 5;
+            console.log(`Auto screen capture enabled - capturing every ${intervalSec}s`);
+            screenshotInterval = setInterval(() => {
+                if (isAiBusy) {
+                    console.log('Skipping auto-capture - AI is busy processing');
+                    return;
+                }
+                captureScreenshot(imageQuality);
+            }, intervalSec * 1000);
+        } else {
+            console.log('Auto screen capture disabled - screenshots captured on demand only');
+        }
+    } catch (err) {
+        console.error('Error starting screen-only capture:', err);
         assistant.setStatus('error');
     }
 }
@@ -1089,6 +1127,7 @@ const assistant = {
     // Core functionality
     initializeGemini,
     startCapture,
+    startCaptureScreenOnly,
     stopCapture,
     sendTextMessage,
     handleShortcut,

@@ -540,6 +540,7 @@ export class AssistantView extends LitElement {
         translationSourceLanguage: { type: String },
         translationTargetLanguage: { type: String },
         screenAnalyses: { type: Array },
+        selectedFeatures: { type: Object },
         _copyFeedback: { state: true },
         _activeTab: { state: true }, // 'assistant' | 'translation' | 'screen'
         _translationEntries: { state: true },
@@ -564,6 +565,7 @@ export class AssistantView extends LitElement {
         this.translationSourceLanguage = '';
         this.translationTargetLanguage = '';
         this.screenAnalyses = [];
+        this.selectedFeatures = { assistant: true, translation: false, screenAnalysis: false };
         this._lastRenderedLength = 0;
         this._copyFeedback = false;
         this._activeTab = 'assistant'; // default to assistant tab
@@ -841,27 +843,31 @@ export class AssistantView extends LitElement {
             );
             if (isInputFocused) return;
 
+            const f = this.selectedFeatures || { assistant: true };
+            const activeTabs = [];
+            if (f.assistant) activeTabs.push('assistant');
+            if (f.translation) activeTabs.push('translation');
+            if (f.screenAnalysis) activeTabs.push('screen');
+
+            // Only allow tab switching if multiple features active
+            if (activeTabs.length <= 1) return;
+
             // Tab switching shortcuts
-            if (e.key === 'a' || e.key === 'A') {
+            if ((e.key === 'a' || e.key === 'A') && f.assistant) {
                 e.preventDefault();
                 this._activeTab = 'assistant';
-            } else if ((e.key === 't' || e.key === 'T') && this.translationEnabled) {
+            } else if ((e.key === 't' || e.key === 'T') && f.translation) {
                 e.preventDefault();
                 this._activeTab = 'translation';
-            } else if (e.key === 's' || e.key === 'S') {
+            } else if ((e.key === 's' || e.key === 'S') && f.screenAnalysis) {
                 e.preventDefault();
                 this._activeTab = 'screen';
-                this._hasNewScreenAnalyses = false; // Clear indicator when viewing
+                this._hasNewScreenAnalyses = false;
             } else if (e.key === 'Tab') {
                 e.preventDefault();
-                // Cycle through tabs
-                if (this._activeTab === 'assistant') {
-                    this._activeTab = this.translationEnabled ? 'translation' : 'screen';
-                } else if (this._activeTab === 'translation') {
-                    this._activeTab = 'screen';
-                } else {
-                    this._activeTab = 'assistant';
-                }
+                const currentIdx = activeTabs.indexOf(this._activeTab);
+                const nextIdx = (currentIdx + 1) % activeTabs.length;
+                this._activeTab = activeTabs[nextIdx];
                 if (this._activeTab === 'screen') {
                     this._hasNewScreenAnalyses = false;
                 }
@@ -869,9 +875,18 @@ export class AssistantView extends LitElement {
         };
         document.addEventListener('keydown', this._modeKeydownHandler);
 
-        // Reset translation state for new session and default to assistant mode
+        // Set default active tab based on selected features
+        const features = this.selectedFeatures || { assistant: true };
+        if (features.assistant) {
+            this._activeTab = 'assistant';
+        } else if (features.translation) {
+            this._activeTab = 'translation';
+        } else if (features.screenAnalysis) {
+            this._activeTab = 'screen';
+        }
+
+        // Reset translation state for new session
         if (this.translationEnabled) {
-            this._activeTab = 'assistant'; // Start on assistant tab
             this._translationEntries = [];
             this._liveTranslationEntry = null;
             this._pendingTranslationEntries = [];
@@ -1102,48 +1117,56 @@ export class AssistantView extends LitElement {
     render() {
         const responseCounter = this.getResponseCounter();
         const inProgress = this._isRequestInProgress();
-        const showTabs = this.translationEnabled || this.screenAnalyses.length > 0;
+        const f = this.selectedFeatures || { assistant: true };
+        const activeFeatureCount = [f.assistant, f.translation, f.screenAnalysis].filter(Boolean).length;
+        const showTabs = activeFeatureCount > 1;
 
         return html`
             ${showTabs ? html`
                 <div class="mode-indicator">
-                    <button
-                        class="mode-tab ${this._activeTab === 'assistant' ? 'active' : ''}"
-                        @click=${() => { this._activeTab = 'assistant'; }}>
-                        Assistant <span class="mode-key">A</span>
-                    </button>
-                    ${this.translationEnabled ? html`
+                    ${f.assistant ? html`
+                        <button
+                            class="mode-tab ${this._activeTab === 'assistant' ? 'active' : ''}"
+                            @click=${() => { this._activeTab = 'assistant'; }}>
+                            Assistant <span class="mode-key">A</span>
+                        </button>
+                    ` : ''}
+                    ${f.translation ? html`
                         <button
                             class="mode-tab ${this._activeTab === 'translation' ? 'active' : ''}"
                             @click=${() => { this._activeTab = 'translation'; }}>
                             Translation <span class="mode-key">T</span>
                         </button>
                     ` : ''}
-                    <button
-                        class="mode-tab ${this._activeTab === 'screen' ? 'active' : ''}"
-                        @click=${() => {
-                            this._activeTab = 'screen';
-                            this._hasNewScreenAnalyses = false;
-                        }}>
-                        Screen <span class="mode-key">S</span>
-                        ${this._hasNewScreenAnalyses && this._activeTab !== 'screen' ? html`<span class="tab-indicator">•</span>` : ''}
-                    </button>
+                    ${f.screenAnalysis ? html`
+                        <button
+                            class="mode-tab ${this._activeTab === 'screen' ? 'active' : ''}"
+                            @click=${() => {
+                                this._activeTab = 'screen';
+                                this._hasNewScreenAnalyses = false;
+                            }}>
+                            Screen <span class="mode-key">S</span>
+                            ${this._hasNewScreenAnalyses && this._activeTab !== 'screen' ? html`<span class="tab-indicator">•</span>` : ''}
+                        </button>
+                    ` : ''}
                 </div>
             ` : ''}
 
             <!-- Assistant Tab Content -->
-            <div class="content-panel ${!showTabs || this._activeTab === 'assistant' ? 'active' : ''}">
-                <div class="response-wrapper">
-                    <button class="copy-btn" @click=${this.handleCopyResponse}>
-                        ${this._copyFeedback ? 'Copied!' : 'Copy'}
-                    </button>
-                    <div class="response-container" id="responseContainer"></div>
+            ${f.assistant ? html`
+                <div class="content-panel ${!showTabs || this._activeTab === 'assistant' ? 'active' : ''}">
+                    <div class="response-wrapper">
+                        <button class="copy-btn" @click=${this.handleCopyResponse}>
+                            ${this._copyFeedback ? 'Copied!' : 'Copy'}
+                        </button>
+                        <div class="response-container" id="responseContainer"></div>
+                    </div>
                 </div>
-            </div>
+            ` : ''}
 
             <!-- Translation Tab Content -->
-            ${this.translationEnabled ? html`
-                <div class="content-panel ${showTabs && this._activeTab === 'translation' ? 'active' : ''}">
+            ${f.translation ? html`
+                <div class="content-panel ${!showTabs || this._activeTab === 'translation' ? 'active' : ''}">
                     <div class="translation-horizontal">
                         ${this._translationEntries.length === 0
                             && this._pendingTranslationEntries.length === 0
@@ -1213,12 +1236,14 @@ export class AssistantView extends LitElement {
             ` : ''}
 
             <!-- Screen Analysis Tab Content -->
-            <div class="content-panel ${showTabs && this._activeTab === 'screen' ? 'active' : ''}">
-                <screen-analysis-view
-                    .screenAnalyses=${this.screenAnalyses}
-                    @clear-screen-history=${this.handleClearScreenHistory}
-                ></screen-analysis-view>
-            </div>
+            ${f.screenAnalysis ? html`
+                <div class="content-panel ${!showTabs || this._activeTab === 'screen' ? 'active' : ''}">
+                    <screen-analysis-view
+                        .screenAnalyses=${this.screenAnalyses}
+                        @clear-screen-history=${this.handleClearScreenHistory}
+                    ></screen-analysis-view>
+                </div>
+            ` : ''}
 
             ${inProgress ? html`
                 <div class="request-status-container">
@@ -1231,34 +1256,38 @@ export class AssistantView extends LitElement {
             ` : ''}
 
             <div class="text-input-container">
-                <button class="nav-button" @click=${this.navigateToPreviousResponse} ?disabled=${this.currentResponseIndex <= 0}>
-                    <svg width="24px" height="24px" stroke-width="1.7" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M15 6L9 12L15 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
-                    </svg>
-                </button>
+                ${f.assistant ? html`
+                    <button class="nav-button" @click=${this.navigateToPreviousResponse} ?disabled=${this.currentResponseIndex <= 0}>
+                        <svg width="24px" height="24px" stroke-width="1.7" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M15 6L9 12L15 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                    </button>
 
-                ${this.responses.length > 0 ? html`<span class="response-counter">${responseCounter}</span>` : ''}
+                    ${this.responses.length > 0 ? html`<span class="response-counter">${responseCounter}</span>` : ''}
 
-                <button class="nav-button" @click=${this.navigateToNextResponse} ?disabled=${this.currentResponseIndex >= this.responses.length - 1}>
-                    <svg width="24px" height="24px" stroke-width="1.7" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
-                    </svg>
-                </button>
+                    <button class="nav-button" @click=${this.navigateToNextResponse} ?disabled=${this.currentResponseIndex >= this.responses.length - 1}>
+                        <svg width="24px" height="24px" stroke-width="1.7" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M9 6L15 12L9 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+                        </svg>
+                    </button>
 
-                <input
-                    type="text"
-                    id="textInput"
-                    placeholder="${inProgress ? 'AI is thinking... (you can still type)' : 'Type a message to the AI...'}"
-                    @keydown=${this.handleTextKeydown}
-                    class="${inProgress ? 'input-disabled' : ''}"
-                />
+                    <input
+                        type="text"
+                        id="textInput"
+                        placeholder="${inProgress ? 'AI is thinking... (you can still type)' : 'Type a message to the AI...'}"
+                        @keydown=${this.handleTextKeydown}
+                        class="${inProgress ? 'input-disabled' : ''}"
+                    />
+                ` : ''}
 
-                <button class="screen-answer-btn" @click=${this.handleScreenAnswer} ?disabled=${inProgress}>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M15.98 1.804a1 1 0 0 0-1.96 0l-.24 1.192a1 1 0 0 1-.784.785l-1.192.238a1 1 0 0 0 0 1.962l1.192.238a1 1 0 0 1 .785.785l.238 1.192a1 1 0 0 0 1.962 0l.238-1.192a1 1 0 0 1 .785-.785l1.192-.238a1 1 0 0 0 0-1.962l-1.192-.238a1 1 0 0 1-.785-.785l-.238-1.192ZM6.949 5.684a1 1 0 0 0-1.898 0l-.683 2.051a1 1 0 0 1-.633.633l-2.051.683a1 1 0 0 0 0 1.898l2.051.684a1 1 0 0 1 .633.632l.683 2.051a1 1 0 0 0 1.898 0l.683-2.051a1 1 0 0 1 .633-.633l2.051-.683a1 1 0 0 0 0-1.898l-2.051-.683a1 1 0 0 1-.633-.633L6.95 5.684ZM13.949 13.684a1 1 0 0 0-1.898 0l-.184.551a1 1 0 0 1-.632.633l-.551.183a1 1 0 0 0 0 1.898l.551.183a1 1 0 0 1 .633.633l.183.551a1 1 0 0 0 1.898 0l.184-.551a1 1 0 0 1 .632-.633l.551-.183a1 1 0 0 0 0-1.898l-.551-.184a1 1 0 0 1-.633-.632l-.183-.551Z" />
-                    </svg>
-                    <span>${inProgress ? 'Processing...' : 'Analyze screen'}</span>
-                </button>
+                ${f.screenAnalysis ? html`
+                    <button class="screen-answer-btn" @click=${this.handleScreenAnswer} ?disabled=${inProgress}>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M15.98 1.804a1 1 0 0 0-1.96 0l-.24 1.192a1 1 0 0 1-.784.785l-1.192.238a1 1 0 0 0 0 1.962l1.192.238a1 1 0 0 1 .785.785l.238 1.192a1 1 0 0 0 1.962 0l.238-1.192a1 1 0 0 1 .785-.785l1.192-.238a1 1 0 0 0 0-1.962l-1.192-.238a1 1 0 0 1-.785-.785l-.238-1.192ZM6.949 5.684a1 1 0 0 0-1.898 0l-.683 2.051a1 1 0 0 1-.633.633l-2.051.683a1 1 0 0 0 0 1.898l2.051.684a1 1 0 0 1 .633.632l.683 2.051a1 1 0 0 0 1.898 0l.683-2.051a1 1 0 0 1 .633-.633l2.051-.683a1 1 0 0 0 0-1.898l-2.051-.683a1 1 0 0 1-.633-.633L6.95 5.684ZM13.949 13.684a1 1 0 0 0-1.898 0l-.184.551a1 1 0 0 1-.632.633l-.551.183a1 1 0 0 0 0 1.898l.551.183a1 1 0 0 1 .633.633l.183.551a1 1 0 0 0 1.898 0l.184-.551a1 1 0 0 1 .632-.633l.551-.183a1 1 0 0 0 0-1.898l-.551-.184a1 1 0 0 1-.633-.632l-.183-.551Z" />
+                        </svg>
+                        <span>${inProgress ? 'Processing...' : 'Analyze screen'}</span>
+                    </button>
+                ` : ''}
             </div>
         `;
     }

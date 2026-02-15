@@ -81,6 +81,9 @@ const LANG_NAMES = {
     'cs': 'Czech', 'ro': 'Romanian', 'el': 'Greek', 'he': 'Hebrew',
 };
 
+// Suppress assistant responses (translation-only mode)
+let suppressAssistantResponses = false;
+
 // Reconnection variables
 let isUserClosing = false;
 let sessionParams = null;
@@ -276,7 +279,7 @@ function resetResponseInactivityTimer() {
     }, 2000);
 }
 
-async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'interview', language = 'en-US', isReconnect = false, copilotPrep = null, customProfileData = null) {
+async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'interview', language = 'en-US', isReconnect = false, copilotPrep = null, customProfileData = null, options = {}) {
     if (isInitializingSession) {
         console.log('Session initialization already in progress');
         return false;
@@ -287,9 +290,14 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
         sendToRenderer('session-initializing', true);
     }
 
+    // Apply suppress flag
+    if (!isReconnect) {
+        suppressAssistantResponses = !!options.suppressAssistant;
+    }
+
     // Store params for reconnection
     if (!isReconnect) {
-        sessionParams = { apiKey, customPrompt, profile, language, copilotPrep, customProfileData };
+        sessionParams = { apiKey, customPrompt, profile, language, copilotPrep, customProfileData, options };
         reconnectAttempts = 0;
         translationApiKey = apiKey;
         try {
@@ -313,7 +321,9 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
     // Check if RAG embeddings exist for uploaded documents
     const allEmbeddings = copilotPrep?.referenceDocuments?.length > 0 ? getAllEmbeddings() : [];
     const hasEmbeddings = allEmbeddings.length > 0;
-    const systemPrompt = getSystemPrompt(profile, customPrompt, googleSearchEnabled, copilotPrep, customProfileData, hasEmbeddings);
+    const systemPrompt = suppressAssistantResponses
+        ? getSystemPrompt(profile, customPrompt, googleSearchEnabled, copilotPrep, customProfileData, hasEmbeddings, true)
+        : getSystemPrompt(profile, customPrompt, googleSearchEnabled, copilotPrep, customProfileData, hasEmbeddings);
 
     // Initialize retrieval engine if embeddings available
     if (!isReconnect && hasEmbeddings) {
@@ -355,7 +365,7 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
                     }
 
                     // Handle model text response (from sendClientContent text input)
-                    if (message.serverContent?.modelTurn?.parts) {
+                    if (!suppressAssistantResponses && message.serverContent?.modelTurn?.parts) {
                         for (const part of message.serverContent.modelTurn.parts) {
                             if (part.text && part.text.trim() !== '') {
                                 const isNewResponse = messageBuffer === '';
@@ -367,7 +377,7 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
                     }
 
                     // Handle AI model response via output transcription (native audio model)
-                    if (message.serverContent?.outputTranscription?.text) {
+                    if (!suppressAssistantResponses && message.serverContent?.outputTranscription?.text) {
                         const text = message.serverContent.outputTranscription.text;
                         if (text.trim() !== '') {
                             const isNewResponse = messageBuffer === '';
@@ -463,7 +473,8 @@ async function attemptReconnect() {
             sessionParams.language,
             true, // isReconnect
             sessionParams.copilotPrep,
-            sessionParams.customProfileData
+            sessionParams.customProfileData,
+            sessionParams.options || {}
         );
 
         if (session && global.geminiSessionRef) {
@@ -1001,8 +1012,8 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     // Store the geminiSessionRef globally for reconnection access
     global.geminiSessionRef = geminiSessionRef;
 
-    ipcMain.handle('initialize-gemini', async (event, apiKey, customPrompt, profile = 'interview', language = 'en-US', copilotPrep = null, customProfileData = null) => {
-        const session = await initializeGeminiSession(apiKey, customPrompt, profile, language, false, copilotPrep, customProfileData);
+    ipcMain.handle('initialize-gemini', async (event, apiKey, customPrompt, profile = 'interview', language = 'en-US', copilotPrep = null, customProfileData = null, options = {}) => {
+        const session = await initializeGeminiSession(apiKey, customPrompt, profile, language, false, copilotPrep, customProfileData, options);
         if (session) {
             geminiSessionRef.current = session;
             return true;
@@ -1136,6 +1147,9 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
             // Set flag to prevent reconnection attempts
             isUserClosing = true;
             sessionParams = null;
+
+            // Reset suppress mode
+            suppressAssistantResponses = false;
 
             // Cleanup translation state
             resetTranslationState();

@@ -257,7 +257,12 @@ Provide direct, professional responses in **markdown format**.`,
     };
 }
 
-function getSystemPrompt(profile, customPrompt = '', googleSearchEnabled = true, copilotPrep = null, customProfileData = null, hasEmbeddings = false) {
+const PASSIVE_LISTENER_PROMPT = `You are a passive listener and transcription assistant. Your ONLY job is to accurately transcribe the conversation you hear. Do NOT generate coaching, advice, suggestions, or conversational responses of any kind. Focus entirely on accurate speech recognition and transcription. Stay silent unless transcribing speech.`;
+
+function getSystemPrompt(profile, customPrompt = '', googleSearchEnabled = true, copilotPrep = null, customProfileData = null, hasEmbeddings = false, passiveMode = false) {
+    if (passiveMode) {
+        return PASSIVE_LISTENER_PROMPT;
+    }
     let promptParts;
     if (customProfileData) {
         promptParts = buildCustomProfileParts(customProfileData);

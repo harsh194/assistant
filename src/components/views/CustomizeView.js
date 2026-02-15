@@ -539,8 +539,6 @@ export class CustomizeView extends LitElement {
         selectedProfile: { type: String },
         selectedLanguage: { type: String },
         selectedImageQuality: { type: String },
-        screenCaptureEnabled: { type: Boolean },
-        screenCaptureInterval: { type: Number },
         layoutMode: { type: String },
         keybinds: { type: Object },
         googleSearchEnabled: { type: Boolean },
@@ -569,8 +567,6 @@ export class CustomizeView extends LitElement {
         this.selectedProfile = 'interview';
         this.selectedLanguage = 'en-US';
         this.selectedImageQuality = 'medium';
-        this.screenCaptureEnabled = false;
-        this.screenCaptureInterval = 5;
         this.layoutMode = 'normal';
         this.keybinds = this.getDefaultKeybinds();
         this.onProfileChange = () => { };
@@ -631,7 +627,6 @@ export class CustomizeView extends LitElement {
             { id: 'appearance', name: 'Appearance', icon: 'display' },
             { id: 'audio', name: 'Audio', icon: 'mic' },
             { id: 'language', name: 'Language', icon: 'globe' },
-            { id: 'capture', name: 'Capture', icon: 'camera' },
             { id: 'keyboard', name: 'Keyboard', icon: 'keyboard' },
             { id: 'search', name: 'Search', icon: 'search' },
             { id: 'advanced', name: 'Advanced', icon: 'warning', danger: true },
@@ -659,10 +654,6 @@ export class CustomizeView extends LitElement {
                 <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
                 <line x1="8" y1="21" x2="16" y2="21"></line>
                 <line x1="12" y1="17" x2="12" y2="21"></line>
-            </svg>`,
-            camera: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                <circle cx="12" cy="13" r="4"></circle>
             </svg>`,
             keyboard: html`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
@@ -696,8 +687,6 @@ export class CustomizeView extends LitElement {
                 assistant.storage.getCustomProfiles()
             ]);
 
-            this.screenCaptureEnabled = prefs.screenCaptureEnabled ?? false;
-            this.screenCaptureInterval = prefs.screenCaptureInterval ?? 5;
             this.googleSearchEnabled = prefs.googleSearchEnabled ?? true;
             this.backgroundTransparency = prefs.backgroundTransparency ?? 0.8;
             this.fontSize = prefs.fontSize ?? 20;
@@ -872,17 +861,6 @@ export class CustomizeView extends LitElement {
         this.onImageQualityChange(e.target.value);
     }
 
-    async handleScreenCaptureEnabledChange(e) {
-        this.screenCaptureEnabled = e.target.checked;
-        await assistant.storage.updatePreference('screenCaptureEnabled', this.screenCaptureEnabled);
-        this.requestUpdate();
-    }
-
-    async handleScreenCaptureIntervalChange(e) {
-        this.screenCaptureInterval = parseInt(e.target.value, 10);
-        await assistant.storage.updatePreference('screenCaptureInterval', this.screenCaptureInterval);
-        this.requestUpdate();
-    }
 
     handleLayoutModeSelect(e) {
         this.layoutMode = e.target.value;
@@ -1440,69 +1418,6 @@ export class CustomizeView extends LitElement {
         `;
     }
 
-    renderCaptureSection() {
-        return html`
-            <div class="content-header">Screen Capture</div>
-            <div class="form-grid">
-                <div class="checkbox-group">
-                    <input
-                        type="checkbox"
-                        class="checkbox-input"
-                        id="screen-capture-enabled"
-                        .checked=${this.screenCaptureEnabled}
-                        @change=${this.handleScreenCaptureEnabledChange}
-                    />
-                    <label for="screen-capture-enabled" class="checkbox-label">Enable Auto Screen Capture</label>
-                </div>
-                <div class="form-description" style="margin-left: 24px; margin-top: -8px;">
-                    Automatically capture screenshots at regular intervals during a session for AI analysis.
-                    <br /><strong>Note:</strong> When disabled, you can still capture manually using the keyboard shortcut.
-                </div>
-
-                ${this.screenCaptureEnabled ? html`
-                    <div class="form-group" style="margin-top: 4px;">
-                        <label class="form-label">
-                            Capture Interval
-                            <span class="current-selection">${this.screenCaptureInterval >= 60 ? `${this.screenCaptureInterval / 60}m` : `${this.screenCaptureInterval}s`}</span>
-                        </label>
-                        <select class="form-control" .value=${String(this.screenCaptureInterval)} @change=${this.handleScreenCaptureIntervalChange}>
-                            <option value="3" ?selected=${this.screenCaptureInterval === 3}>Every 3 seconds</option>
-                            <option value="5" ?selected=${this.screenCaptureInterval === 5}>Every 5 seconds</option>
-                            <option value="10" ?selected=${this.screenCaptureInterval === 10}>Every 10 seconds</option>
-                            <option value="15" ?selected=${this.screenCaptureInterval === 15}>Every 15 seconds</option>
-                            <option value="30" ?selected=${this.screenCaptureInterval === 30}>Every 30 seconds</option>
-                            <option value="60" ?selected=${this.screenCaptureInterval === 60}>Every 60 seconds</option>
-                            <option value="300" ?selected=${this.screenCaptureInterval === 300}>Every 5 minutes</option>
-                            <option value="600" ?selected=${this.screenCaptureInterval === 600}>Every 10 minutes</option>
-                        </select>
-                        <div class="form-description">
-                            How often the screen is captured and sent to the AI. Shorter intervals use more tokens.
-                        </div>
-                    </div>
-                ` : ''}
-
-                <div class="form-group" style="margin-top: 4px;">
-                    <label class="form-label">
-                        Image Quality
-                        <span class="current-selection">${this.selectedImageQuality.charAt(0).toUpperCase() + this.selectedImageQuality.slice(1)}</span>
-                    </label>
-                    <select class="form-control" .value=${this.selectedImageQuality} @change=${this.handleImageQualitySelect}>
-                        <option value="high" ?selected=${this.selectedImageQuality === 'high'}>High Quality</option>
-                        <option value="medium" ?selected=${this.selectedImageQuality === 'medium'}>Medium Quality</option>
-                        <option value="low" ?selected=${this.selectedImageQuality === 'low'}>Low Quality</option>
-                    </select>
-                    <div class="form-description">
-                        ${this.selectedImageQuality === 'high'
-                ? 'Best quality, uses more tokens'
-                : this.selectedImageQuality === 'medium'
-                    ? 'Balanced quality and token usage'
-                    : 'Lower quality, uses fewer tokens'
-            }
-                    </div>
-                </div>
-            </div>
-        `;
-    }
 
     renderKeyboardSection() {
         return html`
@@ -1607,8 +1522,6 @@ export class CustomizeView extends LitElement {
                 return this.renderAudioSection();
             case 'language':
                 return this.renderLanguageSection();
-            case 'capture':
-                return this.renderCaptureSection();
             case 'keyboard':
                 return this.renderKeyboardSection();
             case 'search':

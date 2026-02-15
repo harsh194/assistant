@@ -351,6 +351,11 @@ export class SessionPrepView extends LitElement {
         _draftSaved: { state: true },
         _templateName: { state: true },
         _templateSaved: { state: true },
+        _featureAssistant: { state: true },
+        _featureTranslation: { state: true },
+        _featureScreenAnalysis: { state: true },
+        _screenAutoCapture: { state: true },
+        _screenInterval: { state: true },
     };
 
     constructor() {
@@ -376,6 +381,11 @@ export class SessionPrepView extends LitElement {
         this._draftSaveTimer = null;
         this._templateName = '';
         this._templateSaved = false;
+        this._featureAssistant = true;
+        this._featureTranslation = false;
+        this._featureScreenAnalysis = false;
+        this._screenAutoCapture = false;
+        this._screenInterval = '5';
         this._loadFromStorage();
     }
 
@@ -383,6 +393,20 @@ export class SessionPrepView extends LitElement {
         try {
             const data = await assistant.storage.getCoPilotPrep();
             this.prepData = { ...this.prepData, ...data };
+            // Load last-used features from preferences
+            const prefs = await assistant.storage.getPreferences();
+            const lastFeatures = prefs.lastFeatures;
+            if (lastFeatures) {
+                this._featureAssistant = lastFeatures.assistant !== false;
+                this._featureTranslation = !!lastFeatures.translation;
+                this._featureScreenAnalysis = !!lastFeatures.screenAnalysis;
+            }
+            // Sync translation toggle with feature state
+            if (this.prepData.translationEnabled) {
+                this._featureTranslation = true;
+            }
+            this._screenAutoCapture = prefs.screenCaptureEnabled || false;
+            this._screenInterval = String(prefs.screenCaptureInterval || '5');
             this.requestUpdate();
         } catch (error) {
             console.error('Error loading co-pilot prep:', error);
@@ -491,7 +515,37 @@ export class SessionPrepView extends LitElement {
         return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     }
 
-    _handleStartSession() {
+    _getActiveFeatureCount() {
+        return [this._featureAssistant, this._featureTranslation, this._featureScreenAnalysis].filter(Boolean).length;
+    }
+
+    _toggleFeature(feature) {
+        const current = this[`_feature${feature}`];
+        if (current && this._getActiveFeatureCount() <= 1) {
+            return;
+        }
+        this[`_feature${feature}`] = !current;
+    }
+
+    async _handleStartSession() {
+        const selectedFeatures = {
+            assistant: this._featureAssistant,
+            translation: this._featureTranslation,
+            screenAnalysis: this._featureScreenAnalysis,
+        };
+        // Validate translation has target language
+        if (selectedFeatures.translation && !this.prepData.translationTargetLanguage) {
+            return;
+        }
+        // Save features and screen config
+        await assistant.storage.updatePreference('lastFeatures', selectedFeatures);
+        if (selectedFeatures.screenAnalysis) {
+            await assistant.storage.updatePreference('screenCaptureEnabled', this._screenAutoCapture);
+            await assistant.storage.updatePreference('screenCaptureInterval', parseInt(this._screenInterval) || 5);
+        }
+        // Sync translation enabled from feature toggle
+        this.prepData.translationEnabled = selectedFeatures.translation;
+        this.prepData.selectedFeatures = selectedFeatures;
         this.onStartSession(this.prepData);
     }
 
@@ -509,6 +563,9 @@ export class SessionPrepView extends LitElement {
             translationSourceLanguage: '',
             translationTargetLanguage: '',
         };
+        this._featureAssistant = true;
+        this._featureTranslation = false;
+        this._featureScreenAnalysis = false;
         this.requestUpdate();
     }
 
@@ -708,20 +765,35 @@ export class SessionPrepView extends LitElement {
                 <hr class="section-divider" />
 
                 <div class="form-group">
-                    <label class="form-label">Real-Time Translation</label>
-                    <div class="form-description">Translate conversation speech during the session</div>
+                    <label class="form-label">Features</label>
+                    <div class="form-description">Select which features to activate for this session</div>
+
                     <div class="checkbox-row">
-                        <input
-                            type="checkbox"
-                            id="translationEnabled"
-                            .checked=${this.prepData.translationEnabled}
-                            @change=${e => this._saveField('translationEnabled', e.target.checked)}
-                        />
-                        <label for="translationEnabled">Enable translation mode</label>
+                        <input type="checkbox" id="prepFeatureAssistant"
+                            .checked=${this._featureAssistant}
+                            ?disabled=${this._featureAssistant && this._getActiveFeatureCount() <= 1}
+                            @change=${() => this._toggleFeature('Assistant')} />
+                        <label for="prepFeatureAssistant">AI Assistant</label>
+                    </div>
+
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="prepFeatureTranslation"
+                            .checked=${this._featureTranslation}
+                            ?disabled=${this._featureTranslation && this._getActiveFeatureCount() <= 1}
+                            @change=${() => this._toggleFeature('Translation')} />
+                        <label for="prepFeatureTranslation">Live Translation</label>
+                    </div>
+
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="prepFeatureScreen"
+                            .checked=${this._featureScreenAnalysis}
+                            ?disabled=${this._featureScreenAnalysis && this._getActiveFeatureCount() <= 1}
+                            @change=${() => this._toggleFeature('ScreenAnalysis')} />
+                        <label for="prepFeatureScreen">Screen Analysis</label>
                     </div>
                 </div>
 
-                ${this.prepData.translationEnabled ? html`
+                ${this._featureTranslation ? html`
                     <div class="form-group">
                         <label class="form-label">Source Language</label>
                         <div class="form-description">Language spoken by others</div>
@@ -749,6 +821,28 @@ export class SessionPrepView extends LitElement {
                                 </option>
                             `)}
                         </select>
+                    </div>
+                ` : ''}
+
+                ${this._featureScreenAnalysis ? html`
+                    <div class="form-group">
+                        <div class="checkbox-row">
+                            <input type="checkbox" id="prepScreenAutoCapture"
+                                .checked=${this._screenAutoCapture}
+                                @change=${e => { this._screenAutoCapture = e.target.checked; }} />
+                            <label for="prepScreenAutoCapture">Auto-capture every</label>
+                            <select style="width: auto; min-width: 60px;"
+                                class="form-control"
+                                .value=${this._screenInterval}
+                                @change=${e => { this._screenInterval = e.target.value; }}>
+                                <option value="3">3s</option>
+                                <option value="5">5s</option>
+                                <option value="10">10s</option>
+                                <option value="15">15s</option>
+                                <option value="30">30s</option>
+                                <option value="60">60s</option>
+                            </select>
+                        </div>
                     </div>
                 ` : ''}
 

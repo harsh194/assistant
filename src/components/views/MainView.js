@@ -205,46 +205,80 @@ export class MainView extends LitElement {
             margin-top: 16px;
         }
 
-        .translation-section {
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius);
-            padding: 10px 14px;
+        .feature-picker {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 20px;
         }
 
-        .translation-toggle {
+        .feature-picker-label {
+            font-size: 10px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+
+        .feature-card {
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            padding: 10px 12px;
+            transition: all 0.15s ease;
+        }
+
+        .feature-card.active {
+            border-color: var(--btn-primary-bg);
+        }
+
+        .feature-toggle {
             display: flex;
             align-items: center;
             gap: 8px;
         }
 
-        .translation-toggle input[type="checkbox"] {
+        .feature-toggle input[type="checkbox"] {
             width: auto;
             padding: 0;
             cursor: pointer;
             accent-color: var(--btn-primary-bg);
         }
 
-        .translation-toggle label {
+        .feature-toggle input[type="checkbox"]:disabled {
+            cursor: not-allowed;
+            opacity: 0.4;
+        }
+
+        .feature-toggle label {
             font-size: 12px;
             color: var(--text-color);
             font-weight: 500;
             cursor: pointer;
+            flex: 1;
         }
 
-        .translation-langs {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
+        .feature-desc {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-left: 24px;
+            margin-top: 2px;
+        }
+
+        .feature-expand {
             margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-color);
         }
 
-        .translation-langs .lang-group {
+        .feature-expand .lang-group {
             display: flex;
             flex-direction: column;
             gap: 3px;
+            margin-bottom: 8px;
         }
 
-        .translation-langs .lang-label {
+        .feature-expand .lang-label {
             font-size: 10px;
             font-weight: 500;
             color: var(--text-muted);
@@ -252,7 +286,7 @@ export class MainView extends LitElement {
             letter-spacing: 0.3px;
         }
 
-        .translation-langs select {
+        .feature-expand select {
             background: var(--input-background);
             color: var(--text-color);
             border: 1px solid var(--border-color);
@@ -260,20 +294,21 @@ export class MainView extends LitElement {
             border-radius: var(--border-radius);
             font-size: 12px;
             cursor: pointer;
+            width: 100%;
         }
 
-        .translation-langs select:focus {
+        .feature-expand select:focus {
             outline: none;
             border-color: var(--border-default);
         }
 
-        .cloud-key-section {
-            margin-top: 10px;
-            padding-top: 10px;
+        .feature-expand .cloud-key-section {
+            margin-top: 8px;
+            padding-top: 8px;
             border-top: 1px solid var(--border-color);
         }
 
-        .cloud-key-label {
+        .feature-expand .cloud-key-label {
             font-size: 10px;
             font-weight: 500;
             color: var(--text-muted);
@@ -282,14 +317,14 @@ export class MainView extends LitElement {
             margin-bottom: 3px;
         }
 
-        .cloud-key-hint {
+        .feature-expand .cloud-key-hint {
             font-size: 10px;
             color: var(--text-muted);
             margin-bottom: 6px;
             line-height: 1.4;
         }
 
-        .cloud-key-input {
+        .feature-expand .cloud-key-input {
             background: var(--input-background);
             color: var(--text-color);
             border: 1px solid var(--border-color);
@@ -297,32 +332,53 @@ export class MainView extends LitElement {
             width: 100%;
             border-radius: var(--border-radius);
             font-size: 12px;
-            transition: border-color 0.15s ease;
         }
 
-        .cloud-key-input:focus {
+        .feature-expand .cloud-key-input:focus {
             outline: none;
             border-color: var(--border-default);
         }
 
-        .cloud-key-input::placeholder {
+        .feature-expand .cloud-key-input::placeholder {
             color: var(--placeholder-color);
         }
 
-        .cloud-key-status {
+        .feature-expand .cloud-key-status {
             font-size: 10px;
             margin-top: 4px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
         }
 
-        .cloud-key-status.connected {
+        .feature-expand .cloud-key-status.connected {
             color: var(--success-color, #4caf50);
         }
 
-        .cloud-key-status.empty {
+        .feature-expand .cloud-key-status.empty {
             color: var(--text-muted);
+        }
+
+        .feature-expand .screen-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .feature-expand .screen-group input[type="checkbox"] {
+            width: auto;
+            padding: 0;
+            cursor: pointer;
+            accent-color: var(--btn-primary-bg);
+        }
+
+        .feature-expand .screen-group label {
+            font-size: 11px;
+            color: var(--text-color);
+            cursor: pointer;
+        }
+
+        .feature-expand .screen-group select {
+            width: auto;
+            min-width: 70px;
         }
     `;
 
@@ -336,10 +392,14 @@ export class MainView extends LitElement {
         showApiKeyError: { type: Boolean },
         _hasDraft: { state: true },
         _templates: { state: true },
-        _translationEnabled: { state: true },
+        _featureAssistant: { state: true },
+        _featureTranslation: { state: true },
+        _featureScreenAnalysis: { state: true },
         _translationSourceLang: { state: true },
         _translationTargetLang: { state: true },
         _googleTranslationKey: { state: true },
+        _screenAutoCapture: { state: true },
+        _screenInterval: { state: true },
     };
 
     constructor() {
@@ -355,12 +415,16 @@ export class MainView extends LitElement {
         this.apiKey = '';
         this._hasDraft = false;
         this._templates = [];
-        this._translationEnabled = false;
+        this._featureAssistant = true;
+        this._featureTranslation = false;
+        this._featureScreenAnalysis = false;
         this._translationSourceLang = '';
         this._translationTargetLang = '';
         this._googleTranslationKey = '';
+        this._screenAutoCapture = false;
+        this._screenInterval = '5';
         this._loadApiKey();
-        this._loadTranslationConfig();
+        this._loadFeatureConfig();
     }
 
     async _loadApiKey() {
@@ -368,14 +432,24 @@ export class MainView extends LitElement {
         this.requestUpdate();
     }
 
-    async _loadTranslationConfig() {
+    async _loadFeatureConfig() {
         try {
-            const config = await assistant.storage.getTranslationConfig();
-            this._translationEnabled = config.enabled || false;
-            this._translationSourceLang = config.sourceLanguage || '';
-            this._translationTargetLang = config.targetLanguage || '';
+            const prefs = await assistant.storage.getPreferences();
+            // Load last-used features
+            const lastFeatures = prefs.lastFeatures;
+            if (lastFeatures) {
+                this._featureAssistant = lastFeatures.assistant !== false;
+                this._featureTranslation = !!lastFeatures.translation;
+                this._featureScreenAnalysis = !!lastFeatures.screenAnalysis;
+            }
+            // Load translation config
+            this._translationSourceLang = prefs.translationSourceLanguage || '';
+            this._translationTargetLang = prefs.translationTargetLanguage || '';
             const gtKey = await assistant.storage.getGoogleTranslationApiKey();
             this._googleTranslationKey = gtKey || '';
+            // Load screen analysis config
+            this._screenAutoCapture = prefs.screenCaptureEnabled || false;
+            this._screenInterval = String(prefs.screenCaptureInterval || '5');
         } catch (error) {
             // Use defaults
         }
@@ -383,10 +457,30 @@ export class MainView extends LitElement {
 
     async _saveTranslationConfig() {
         await assistant.storage.setTranslationConfig({
-            enabled: this._translationEnabled,
+            enabled: this._featureTranslation,
             sourceLanguage: this._translationSourceLang,
             targetLanguage: this._translationTargetLang,
         });
+    }
+
+    _getSelectedFeatures() {
+        return {
+            assistant: this._featureAssistant,
+            translation: this._featureTranslation,
+            screenAnalysis: this._featureScreenAnalysis,
+        };
+    }
+
+    _getActiveFeatureCount() {
+        return [this._featureAssistant, this._featureTranslation, this._featureScreenAnalysis].filter(Boolean).length;
+    }
+
+    _toggleFeature(feature) {
+        const current = this[`_feature${feature}`];
+        if (current && this._getActiveFeatureCount() <= 1) {
+            return; // Cannot deselect the last active feature
+        }
+        this[`_feature${feature}`] = !current;
     }
 
     _getLanguageOptions() {
@@ -481,11 +575,25 @@ export class MainView extends LitElement {
         }
     }
 
-    handleStartClick() {
+    async handleStartClick() {
         if (this.isInitializing) {
             return;
         }
-        this.onStart();
+        const features = this._getSelectedFeatures();
+        // Validate translation has target language
+        if (features.translation && !this._translationTargetLang) {
+            return;
+        }
+        // Save last-used features and screen config
+        await assistant.storage.updatePreference('lastFeatures', features);
+        if (features.screenAnalysis) {
+            await assistant.storage.updatePreference('screenCaptureEnabled', this._screenAutoCapture);
+            await assistant.storage.updatePreference('screenCaptureInterval', parseInt(this._screenInterval) || 5);
+        }
+        if (features.translation) {
+            await this._saveTranslationConfig();
+        }
+        this.onStart(features);
     }
 
     handleAPIKeyHelpClick() {
@@ -529,6 +637,125 @@ export class MainView extends LitElement {
                     class="${this.showApiKeyError ? 'api-key-error' : ''}"
                 />
 
+                <div class="feature-picker">
+                    <div class="feature-picker-label">Features</div>
+
+                    <div class="feature-card ${this._featureAssistant ? 'active' : ''}">
+                        <div class="feature-toggle">
+                            <input
+                                type="checkbox"
+                                id="featureAssistant"
+                                .checked=${this._featureAssistant}
+                                ?disabled=${this._featureAssistant && this._getActiveFeatureCount() <= 1}
+                                @change=${() => this._toggleFeature('Assistant')}
+                            />
+                            <label for="featureAssistant">AI Assistant</label>
+                        </div>
+                        <div class="feature-desc">Real-time AI responses and coaching</div>
+                    </div>
+
+                    <div class="feature-card ${this._featureTranslation ? 'active' : ''}">
+                        <div class="feature-toggle">
+                            <input
+                                type="checkbox"
+                                id="featureTranslation"
+                                .checked=${this._featureTranslation}
+                                ?disabled=${this._featureTranslation && this._getActiveFeatureCount() <= 1}
+                                @change=${() => this._toggleFeature('Translation')}
+                            />
+                            <label for="featureTranslation">Live Translation</label>
+                        </div>
+                        <div class="feature-desc">Real-time speech translation</div>
+                        ${this._featureTranslation ? html`
+                            <div class="feature-expand">
+                                <div class="lang-group">
+                                    <span class="lang-label">Source (spoken by others)</span>
+                                    <select
+                                        .value=${this._translationSourceLang}
+                                        @change=${e => { this._translationSourceLang = e.target.value; }}>
+                                        <option value="">Auto-detect</option>
+                                        ${this._getLanguageOptions().map(lang => html`
+                                            <option value=${lang.code} ?selected=${this._translationSourceLang === lang.code}>
+                                                ${lang.name}
+                                            </option>
+                                        `)}
+                                    </select>
+                                </div>
+                                <div class="lang-group">
+                                    <span class="lang-label">Target (your language)</span>
+                                    <select
+                                        .value=${this._translationTargetLang}
+                                        @change=${e => { this._translationTargetLang = e.target.value; }}>
+                                        <option value="">Select language</option>
+                                        ${this._getLanguageOptions().map(lang => html`
+                                            <option value=${lang.code} ?selected=${this._translationTargetLang === lang.code}>
+                                                ${lang.name}
+                                            </option>
+                                        `)}
+                                    </select>
+                                </div>
+                                <div class="cloud-key-section">
+                                    <div class="cloud-key-label">Cloud Translation API Key</div>
+                                    <div class="cloud-key-hint">Optional — enables fast live translations</div>
+                                    <input
+                                        type="password"
+                                        class="cloud-key-input"
+                                        placeholder="Enter Google Cloud Translation key"
+                                        .value=${this._googleTranslationKey}
+                                        @change=${async e => {
+                                            this._googleTranslationKey = e.target.value;
+                                            await assistant.storage.setGoogleTranslationApiKey(e.target.value);
+                                            this.requestUpdate();
+                                        }}
+                                    />
+                                    ${this._googleTranslationKey
+                                        ? html`<div class="cloud-key-status connected">Active</div>`
+                                        : html`<div class="cloud-key-status empty">Uses Gemini when not set</div>`
+                                    }
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+
+                    <div class="feature-card ${this._featureScreenAnalysis ? 'active' : ''}">
+                        <div class="feature-toggle">
+                            <input
+                                type="checkbox"
+                                id="featureScreen"
+                                .checked=${this._featureScreenAnalysis}
+                                ?disabled=${this._featureScreenAnalysis && this._getActiveFeatureCount() <= 1}
+                                @change=${() => this._toggleFeature('ScreenAnalysis')}
+                            />
+                            <label for="featureScreen">Screen Analysis</label>
+                        </div>
+                        <div class="feature-desc">AI-powered screenshot analysis</div>
+                        ${this._featureScreenAnalysis ? html`
+                            <div class="feature-expand">
+                                <div class="screen-group">
+                                    <input
+                                        type="checkbox"
+                                        id="screenAutoCapture"
+                                        .checked=${this._screenAutoCapture}
+                                        @change=${e => { this._screenAutoCapture = e.target.checked; }}
+                                    />
+                                    <label for="screenAutoCapture">Auto-capture every</label>
+                                    <select
+                                        .value=${this._screenInterval}
+                                        @change=${e => { this._screenInterval = e.target.value; }}>
+                                        <option value="3">3s</option>
+                                        <option value="5">5s</option>
+                                        <option value="10">10s</option>
+                                        <option value="15">15s</option>
+                                        <option value="30">30s</option>
+                                        <option value="60">60s</option>
+                                        <option value="300">5m</option>
+                                    </select>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+
                 <div class="actions">
                     <button
                         @click=${this.handleStartClick}
@@ -562,76 +789,6 @@ export class MainView extends LitElement {
                             </select>
                         </div>
                     ` : ''}
-
-                    <div class="translation-section">
-                    <div class="translation-toggle">
-                        <input
-                            type="checkbox"
-                            id="mainTranslation"
-                            .checked=${this._translationEnabled}
-                            @change=${e => {
-                                this._translationEnabled = e.target.checked;
-                                this._saveTranslationConfig();
-                            }}
-                        />
-                        <label for="mainTranslation">Real-time translation</label>
-                    </div>
-                    ${this._translationEnabled ? html`
-                        <div class="translation-langs">
-                            <div class="lang-group">
-                                <span class="lang-label">Source (spoken by others)</span>
-                                <select
-                                    .value=${this._translationSourceLang}
-                                    @change=${e => {
-                                        this._translationSourceLang = e.target.value;
-                                        this._saveTranslationConfig();
-                                    }}>
-                                    <option value="">Auto-detect</option>
-                                    ${this._getLanguageOptions().map(lang => html`
-                                        <option value=${lang.code} ?selected=${this._translationSourceLang === lang.code}>
-                                            ${lang.name}
-                                        </option>
-                                    `)}
-                                </select>
-                            </div>
-                            <div class="lang-group">
-                                <span class="lang-label">Target (your language)</span>
-                                <select
-                                    .value=${this._translationTargetLang}
-                                    @change=${e => {
-                                        this._translationTargetLang = e.target.value;
-                                        this._saveTranslationConfig();
-                                    }}>
-                                    <option value="">Select language</option>
-                                    ${this._getLanguageOptions().map(lang => html`
-                                        <option value=${lang.code} ?selected=${this._translationTargetLang === lang.code}>
-                                            ${lang.name}
-                                        </option>
-                                    `)}
-                                </select>
-                            </div>
-                        </div>
-                        <div class="cloud-key-section">
-                            <div class="cloud-key-label">Cloud Translation API Key</div>
-                            <div class="cloud-key-hint">Optional — enables fast live translations as others speak</div>
-                            <input
-                                type="password"
-                                class="cloud-key-input"
-                                placeholder="Enter Google Cloud Translation key"
-                                .value=${this._googleTranslationKey}
-                                @change=${async e => {
-                                    this._googleTranslationKey = e.target.value;
-                                    await assistant.storage.setGoogleTranslationApiKey(e.target.value);
-                                    this.requestUpdate();
-                                }}
-                            />
-                            ${this._googleTranslationKey
-                                ? html`<div class="cloud-key-status connected">Active</div>`
-                                : html`<div class="cloud-key-status empty">Uses Gemini for translation when not set</div>`
-                            }
-                        </div>
-                    ` : ''}
-                    </div>
                 </div>
 
                 <div class="shortcut-hint">${shortcut} to start</div>
