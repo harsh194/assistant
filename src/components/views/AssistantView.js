@@ -2,6 +2,7 @@ import { html, css, LitElement } from '../../assets/lit-core-2.7.4.min.js';
 import { RequestState, isRequestInProgress } from '../../utils/requestState.js';
 import { parseResponse, mergeNotes } from '../../utils/notesParser.js';
 import '../ui/RequestStatus.js';
+import './ScreenAnalysisView.js';
 
 export class AssistantView extends LitElement {
     static styles = css`
@@ -345,6 +346,13 @@ export class AssistantView extends LitElement {
             margin-left: 4px;
         }
 
+        .tab-indicator {
+            color: #4CAF50;
+            font-size: 18px;
+            margin-left: 4px;
+            line-height: 0;
+        }
+
         /* Content panels - show/hide without destroying DOM */
         .content-panel {
             flex: 1;
@@ -464,9 +472,11 @@ export class AssistantView extends LitElement {
         translationEnabled: { type: Boolean },
         translationSourceLanguage: { type: String },
         translationTargetLanguage: { type: String },
+        screenAnalyses: { type: Array },
         _copyFeedback: { state: true },
-        _translationMode: { state: true },
+        _activeTab: { state: true }, // 'assistant' | 'translation' | 'screen'
         _translationEntries: { state: true },
+        _hasNewScreenAnalyses: { state: true },
     };
 
     constructor() {
@@ -484,10 +494,12 @@ export class AssistantView extends LitElement {
         this.translationEnabled = false;
         this.translationSourceLanguage = '';
         this.translationTargetLanguage = '';
+        this.screenAnalyses = [];
         this._lastRenderedLength = 0;
         this._copyFeedback = false;
-        this._translationMode = false;
+        this._activeTab = 'assistant'; // default to assistant tab
         this._translationEntries = [];
+        this._hasNewScreenAnalyses = false;
         this._sessionNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
         this._lastParsedResponse = '';
     }
@@ -685,16 +697,14 @@ export class AssistantView extends LitElement {
                 const MAX_ENTRIES = 500;
                 const updated = [...this._translationEntries, data];
                 this._translationEntries = updated.length > MAX_ENTRIES ? updated.slice(-MAX_ENTRIES) : updated;
-                if (this._translationMode) {
+                if (this._activeTab === 'translation') {
                     this.scrollTranslationToBottom();
                 }
             }));
         }
 
-        // Keyboard shortcuts for translation mode switching
+        // Keyboard shortcuts for tab switching
         this._modeKeydownHandler = (e) => {
-            if (!this.translationEnabled) return;
-
             // Don't intercept when input/textarea/contenteditable is focused
             const activeEl = this.shadowRoot?.activeElement || document.activeElement;
             const isInputFocused = activeEl && (
@@ -704,22 +714,37 @@ export class AssistantView extends LitElement {
             );
             if (isInputFocused) return;
 
-            if (e.key === 't' || e.key === 'T') {
+            // Tab switching shortcuts
+            if (e.key === 'a' || e.key === 'A') {
                 e.preventDefault();
-                this._translationMode = true;
-            } else if (e.key === 'a' || e.key === 'A') {
+                this._activeTab = 'assistant';
+            } else if ((e.key === 't' || e.key === 'T') && this.translationEnabled) {
                 e.preventDefault();
-                this._translationMode = false;
+                this._activeTab = 'translation';
+            } else if (e.key === 's' || e.key === 'S') {
+                e.preventDefault();
+                this._activeTab = 'screen';
+                this._hasNewScreenAnalyses = false; // Clear indicator when viewing
             } else if (e.key === 'Tab') {
                 e.preventDefault();
-                this._translationMode = !this._translationMode;
+                // Cycle through tabs
+                if (this._activeTab === 'assistant') {
+                    this._activeTab = this.translationEnabled ? 'translation' : 'screen';
+                } else if (this._activeTab === 'translation') {
+                    this._activeTab = 'screen';
+                } else {
+                    this._activeTab = 'assistant';
+                }
+                if (this._activeTab === 'screen') {
+                    this._hasNewScreenAnalyses = false;
+                }
             }
         };
         document.addEventListener('keydown', this._modeKeydownHandler);
 
-        // Reset translation state for new session and default to translation mode
+        // Reset translation state for new session and default to assistant mode
         if (this.translationEnabled) {
-            this._translationMode = true;
+            this._activeTab = 'assistant'; // Start on assistant tab
             this._translationEntries = [];
         }
     }
@@ -869,6 +894,13 @@ export class AssistantView extends LitElement {
         }
     }
 
+    handleClearScreenHistory() {
+        this.dispatchEvent(new CustomEvent('clear-screen-history', {
+            bubbles: true,
+            composed: true,
+        }));
+    }
+
     scrollToBottom() {
         setTimeout(() => {
             const container = this.shadowRoot.querySelector('.response-container');
@@ -941,25 +973,37 @@ export class AssistantView extends LitElement {
     render() {
         const responseCounter = this.getResponseCounter();
         const inProgress = this._isRequestInProgress();
-        const showTabs = this.translationEnabled;
+        const showTabs = this.translationEnabled || this.screenAnalyses.length > 0;
 
         return html`
             ${showTabs ? html`
                 <div class="mode-indicator">
                     <button
-                        class="mode-tab ${!this._translationMode ? 'active' : ''}"
-                        @click=${() => { this._translationMode = false; }}>
+                        class="mode-tab ${this._activeTab === 'assistant' ? 'active' : ''}"
+                        @click=${() => { this._activeTab = 'assistant'; }}>
                         Assistant <span class="mode-key">A</span>
                     </button>
+                    ${this.translationEnabled ? html`
+                        <button
+                            class="mode-tab ${this._activeTab === 'translation' ? 'active' : ''}"
+                            @click=${() => { this._activeTab = 'translation'; }}>
+                            Translation <span class="mode-key">T</span>
+                        </button>
+                    ` : ''}
                     <button
-                        class="mode-tab ${this._translationMode ? 'active' : ''}"
-                        @click=${() => { this._translationMode = true; }}>
-                        Translation <span class="mode-key">T</span>
+                        class="mode-tab ${this._activeTab === 'screen' ? 'active' : ''}"
+                        @click=${() => {
+                            this._activeTab = 'screen';
+                            this._hasNewScreenAnalyses = false;
+                        }}>
+                        Screen <span class="mode-key">S</span>
+                        ${this._hasNewScreenAnalyses && this._activeTab !== 'screen' ? html`<span class="tab-indicator">•</span>` : ''}
                     </button>
                 </div>
             ` : ''}
 
-            <div class="content-panel ${!showTabs || !this._translationMode ? 'active' : ''}">
+            <!-- Assistant Tab Content -->
+            <div class="content-panel ${!showTabs || this._activeTab === 'assistant' ? 'active' : ''}">
                 <div class="response-wrapper">
                     <button class="copy-btn" @click=${this.handleCopyResponse}>
                         ${this._copyFeedback ? 'Copied!' : 'Copy'}
@@ -968,38 +1012,49 @@ export class AssistantView extends LitElement {
                 </div>
             </div>
 
-            <div class="content-panel ${showTabs && this._translationMode ? 'active' : ''}">
-                <div class="translation-horizontal">
-                    ${this._translationEntries.length === 0
-                        ? html`<div class="translation-empty">Listening for speech to translate...</div>`
-                        : html`
-                            <div class="translation-columns">
-                                <div class="translation-column">
-                                    <div class="translation-column-header">${this._getLanguageName(this.translationSourceLanguage) || 'Original'}</div>
-                                    <div class="translation-column-scroll">
-                                        ${this._translationEntries.map(entry => html`
-                                            <div class="translation-row">
-                                                ${entry.speaker ? html`<span class="translation-speaker">${entry.speaker}</span>` : ''}
-                                                <div class="translation-text original">${entry.original}</div>
-                                            </div>
-                                        `)}
+            <!-- Translation Tab Content -->
+            ${this.translationEnabled ? html`
+                <div class="content-panel ${showTabs && this._activeTab === 'translation' ? 'active' : ''}">
+                    <div class="translation-horizontal">
+                        ${this._translationEntries.length === 0
+                            ? html`<div class="translation-empty">Listening for speech to translate...</div>`
+                            : html`
+                                <div class="translation-columns">
+                                    <div class="translation-column">
+                                        <div class="translation-column-header">${this._getLanguageName(this.translationSourceLanguage) || 'Original'}</div>
+                                        <div class="translation-column-scroll">
+                                            ${this._translationEntries.map(entry => html`
+                                                <div class="translation-row">
+                                                    ${entry.speaker ? html`<span class="translation-speaker">${entry.speaker}</span>` : ''}
+                                                    <div class="translation-text original">${entry.original}</div>
+                                                </div>
+                                            `)}
+                                        </div>
+                                    </div>
+                                    <div class="translation-column">
+                                        <div class="translation-column-header">${this._getLanguageName(this.translationTargetLanguage) || 'Translation'}</div>
+                                        <div class="translation-column-scroll">
+                                            ${this._translationEntries.map(entry => html`
+                                                <div class="translation-row">
+                                                    ${entry.speaker ? html`<span class="translation-speaker">${entry.speaker}</span>` : ''}
+                                                    <div class="translation-text ${entry.error ? 'error' : ''}">${entry.translated}</div>
+                                                </div>
+                                            `)}
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="translation-column">
-                                    <div class="translation-column-header">${this._getLanguageName(this.translationTargetLanguage) || 'Translation'}</div>
-                                    <div class="translation-column-scroll">
-                                        ${this._translationEntries.map(entry => html`
-                                            <div class="translation-row">
-                                                ${entry.speaker ? html`<span class="translation-speaker">${entry.speaker}</span>` : ''}
-                                                <div class="translation-text ${entry.error ? 'error' : ''}">${entry.translated}</div>
-                                            </div>
-                                        `)}
-                                    </div>
-                                </div>
-                            </div>
-                        `
-                    }
+                            `
+                        }
+                    </div>
                 </div>
+            ` : ''}
+
+            <!-- Screen Analysis Tab Content -->
+            <div class="content-panel ${showTabs && this._activeTab === 'screen' ? 'active' : ''}">
+                <screen-analysis-view
+                    .screenAnalyses=${this.screenAnalyses}
+                    @clear-screen-history=${this.handleClearScreenHistory}
+                ></screen-analysis-view>
             </div>
 
             ${inProgress ? html`
