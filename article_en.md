@@ -69,7 +69,7 @@ During critical real-time conversations (interviews, sales calls, negotiations),
 
 ## System Architecture
 
-![System Architecture](./architecture-diagram.png)
+![System Architecture](./assets/architecture-diagram.png)
 
 ### Key Architecture Components:
 
