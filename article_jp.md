@@ -69,7 +69,7 @@ published: true
 
 ## システムアーキテクチャ
 
-![システムアーキテクチャ](./architecture-diagram.png)
+![システムアーキテクチャ](./assets/architecture-diagram.png)
 
 ### アーキテクチャの主要コンポーネント:
 
