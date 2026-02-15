@@ -965,8 +965,14 @@ function getTranslationClient() {
 }
 
 async function translateWithCloudAPI(text, sourceLang, targetLang) {
-    if (!googleCloudTranslationKey) return null;
+    console.log('[TRANSLATION DEBUG] translateWithCloudAPI called');
+    console.log('[TRANSLATION DEBUG] googleCloudTranslationKey exists:', !!googleCloudTranslationKey);
+    if (!googleCloudTranslationKey) {
+        console.log('[TRANSLATION DEBUG] No Cloud Translation key - will use Gemini fallback');
+        return null;
+    }
 
+    console.log('[TRANSLATION DEBUG] Using Cloud Translation API');
     const url = `https://translation.googleapis.com/language/translate/v2?key=${googleCloudTranslationKey}`;
     const body = { q: text, target: targetLang, format: 'text' };
     if (sourceLang) body.source = sourceLang;
@@ -1084,6 +1090,8 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     global.geminiSessionRef = geminiSessionRef;
 
     ipcMain.handle('initialize-gemini', async (event, apiKey, customPrompt, profile = 'interview', language = 'en-US', copilotPrep = null, customProfileData = null, options = {}, googleTranslationKey = null) => {
+        console.log('[TRANSLATION DEBUG] IPC initialize-gemini handler called');
+        console.log('[TRANSLATION DEBUG] Received googleTranslationKey:', googleTranslationKey ? 'YES (length: ' + googleTranslationKey.length + ')' : 'NO');
         const session = await initializeGeminiSession(apiKey, customPrompt, profile, language, false, copilotPrep, customProfileData, options, googleTranslationKey);
         if (session) {
             geminiSessionRef.current = session;

@@ -199,15 +199,19 @@ function arrayBufferToBase64(buffer) {
 
 async function initializeGemini(profile = 'interview', language = 'en-US', copilotPrep = null, options = {}) {
     const apiKey = await storage.getApiKey();
+    console.log('[TRANSLATION DEBUG] Initializing Gemini session...');
     if (apiKey) {
         const prefs = await storage.getPreferences();
         const googleTranslationKey = await storage.getGoogleTranslationApiKey();
+        console.log('[TRANSLATION DEBUG] Retrieved Google Translation Key:', googleTranslationKey ? 'YES (length: ' + googleTranslationKey.length + ')' : 'NO');
+        console.log('[TRANSLATION DEBUG] Translation enabled in prefs:', prefs.translationEnabled);
         let customProfileData = null;
         if (profile.startsWith('custom-')) {
             const customProfiles = await storage.getCustomProfiles();
             const profileId = profile.replace('custom-', '');
             customProfileData = customProfiles.find(p => p.id === profileId) || null;
         }
+        console.log('[TRANSLATION DEBUG] Calling initialize-gemini IPC with googleTranslationKey:', !!googleTranslationKey);
         const success = await api.invoke('initialize-gemini', apiKey, prefs.customPrompt || '', profile, language, copilotPrep, customProfileData, options, googleTranslationKey);
         if (success) {
             assistant.setStatus('Live');

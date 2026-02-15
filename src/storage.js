@@ -63,6 +63,9 @@ function getConfigDir() {
         configDir = path.join(os.homedir(), '.config', 'assistant-config');
     }
 
+    console.log('[STORAGE DEBUG] Config directory:', configDir);
+    console.log('[STORAGE DEBUG] Platform:', platform);
+    console.log('[STORAGE DEBUG] Home directory:', os.homedir());
     return configDir;
 }
 
@@ -222,11 +225,22 @@ function setApiKey(apiKey) {
 }
 
 function getGoogleTranslationApiKey() {
-    return getCredentials().googleTranslationApiKey || '';
+    const credentials = getCredentials();
+    const key = credentials.googleTranslationApiKey || '';
+    console.log('[TRANSLATION DEBUG] getGoogleTranslationApiKey called');
+    console.log('[TRANSLATION DEBUG] Credentials file path:', getCredentialsPath());
+    console.log('[TRANSLATION DEBUG] Key exists in credentials:', !!key);
+    console.log('[TRANSLATION DEBUG] Key length:', key.length);
+    return key;
 }
 
 function setGoogleTranslationApiKey(googleTranslationApiKey) {
-    return setCredentials({ googleTranslationApiKey });
+    console.log('[TRANSLATION DEBUG] setGoogleTranslationApiKey called');
+    console.log('[TRANSLATION DEBUG] Setting key, length:', googleTranslationApiKey ? googleTranslationApiKey.length : 0);
+    console.log('[TRANSLATION DEBUG] Credentials path:', getCredentialsPath());
+    const result = setCredentials({ googleTranslationApiKey });
+    console.log('[TRANSLATION DEBUG] setCredentials result:', result);
+    return result;
 }
 
 // ============ PREFERENCES ============

@@ -1,6 +1,7 @@
 import { html, css, LitElement } from '../../assets/lit-core-2.7.4.min.js';
 import { RequestState, isRequestInProgress } from '../../utils/requestState.js';
 import { parseResponse, mergeNotes } from '../../utils/notesParser.js';
+import { t } from '../../utils/i18n.js';
 import '../ui/RequestStatus.js';
 import './ScreenAnalysisView.js';
 
@@ -612,10 +613,19 @@ export class AssistantView extends LitElement {
     }
 
     getCurrentResponse() {
-        const profileNames = this.getProfileNames();
-        return this.responses.length > 0 && this.currentResponseIndex >= 0
-            ? this.responses[this.currentResponseIndex]
-            : `Hey, Im listening to your ${profileNames[this.selectedProfile] || 'session'}?`;
+        if (this.responses.length > 0 && this.currentResponseIndex >= 0) {
+            return this.responses[this.currentResponseIndex];
+        }
+
+        // Map profiles to localized listening messages
+        const profileMessageKeys = {
+            interview: 'listeningToInterview',
+            yourday: 'listeningToYourDay',
+            study: 'listeningToCoach',
+        };
+
+        const messageKey = profileMessageKeys[this.selectedProfile] || 'listeningToSession';
+        return t(messageKey, this.language);
     }
 
     renderMarkdown(content, skipSpanWrap = false) {
@@ -1171,7 +1181,7 @@ export class AssistantView extends LitElement {
                         ${this._translationEntries.length === 0
                             && this._pendingTranslationEntries.length === 0
                             && !this._liveTranslationEntry
-                            ? html`<div class="translation-empty">Listening for speech to translate...</div>`
+                            ? html`<div class="translation-empty">${t('listeningForSpeech', this.language)}</div>`
                             : html`
                                 <div class="translation-columns">
                                     <div class="translation-column">
