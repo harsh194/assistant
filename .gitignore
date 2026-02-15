@@ -96,3 +96,19 @@ out/
 
 # Agents
 AGENTS.md
+
+# Claude Code (development only)
+.claude/
+CLAUDE.md
+
+# Mermaid diagram sources
+*.mmd
+
+# Internal documentation (keep only README.md)
+Design Document.md
+Requirements Specification.md
+technical.md
+
+# Duplicate/temp files
+*README.md
+!README.md
