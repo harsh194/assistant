@@ -73,7 +73,8 @@ src/
 │   │   └── RequestStatus.js  # Status display with spinner and actions
 │   └── views/
 │       ├── MainView.js           # Main view (Start + Prepare + Templates)
-│       ├── AssistantView.js      # AI response display, screen analysis, translation UI
+│       ├── AssistantView.js      # AI response display with tabbed UI (Assistant/Translation/Screen)
+│       ├── ScreenAnalysisView.js # Screen analysis tab (search, clear, timestamped entries with thumbnails)
 │       ├── SessionPrepView.js    # Co-Pilot pre-session setup form (auto-save drafts, save as template)
 │       ├── SessionSummaryView.js # Post-session summary, notes view/export
 │       ├── OnboardingView.js     # Setup wizard with intro slides
@@ -145,6 +146,21 @@ Fallback Mode (no embeddings):
   Full document text injected inline in system prompt
 ```
 
+### Session Tab System
+
+AssistantView uses a 3-tab UI during active sessions:
+
+```
+Tabs: [Assistant (A)] [Translation (T)] [Screen (S)]
+  - Assistant tab: AI response display with markdown rendering, response navigation
+  - Translation tab: Side-by-side columns (source/target language) with speaker labels
+  - Screen tab: Timestamped screen analysis entries with search, clear, and thumbnails
+  - Tab switching: Click, keyboard shortcuts (A/T/S), or Tab key to cycle
+  - Translation tab only visible when translation is enabled
+  - Screen tab shows green dot indicator when new analyses arrive while on another tab
+  - Tab bar hidden when neither translation nor screen analyses exist
+```
+
 ### Translation Flow
 
 ```
@@ -158,7 +174,7 @@ During Session:
   -> Queue translation request (max 20 queued, max 3 concurrent)
   -> translateText() via Gemini HTTP API (hardened prompt)
   -> 'translation-result' event to renderer
-  -> AssistantView displays original + translated text with speaker labels
+  -> AssistantView Translation tab displays original + translated text in side-by-side columns
 ```
 
 ### Screen Analysis Flow
@@ -169,7 +185,10 @@ Auto-capture (interval-based) or manual trigger
   -> IPC 'send-image-content' with base64 image + prompt
   -> Gemini HTTP API analyzes screenshot
   -> 'save-screen-analysis' event to renderer
+  -> Routed to Screen tab only (not Assistant tab)
+  -> ScreenAnalysisView renders entries with timestamp, model, response text, thumbnail
   -> Stored in session's screenAnalysisHistory
+  -> Searchable and clearable within the Screen tab
 ```
 
 ### Model Fallback

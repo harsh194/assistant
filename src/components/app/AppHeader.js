@@ -111,7 +111,6 @@ export class AppHeader extends LitElement {
         onBackClick: { type: Function },
         onHideToggleClick: { type: Function },
         isClickThrough: { type: Boolean, reflect: true },
-        updateAvailable: { type: Boolean },
         toggleVisibilityKeybind: { type: String },
     };
 
@@ -127,7 +126,6 @@ export class AppHeader extends LitElement {
         this.onBackClick = () => { };
         this.onHideToggleClick = () => { };
         this.isClickThrough = false;
-        this.updateAvailable = false;
         this.toggleVisibilityKeybind = assistant.isMacOS ? 'Cmd+\\' : 'Ctrl+\\';
         this._timerInterval = null;
     }
@@ -135,7 +133,6 @@ export class AppHeader extends LitElement {
     async connectedCallback() {
         super.connectedCallback();
         this._startTimer();
-        this._checkForUpdates();
         await this._loadKeybinds();
         this._setupKeybindListener();
     }
@@ -175,40 +172,6 @@ export class AppHeader extends LitElement {
         `);
     }
 
-    async _checkForUpdates() {
-        try {
-            const currentVersion = await assistant.getVersion();
-            const response = await fetch('https://raw.githubusercontent.com/sohzm/cheating-daddy/refs/heads/master/package.json');
-            if (!response.ok) return;
-
-            const remotePackage = await response.json();
-            const remoteVersion = remotePackage.version;
-
-            if (this._isNewerVersion(remoteVersion, currentVersion)) {
-                this.updateAvailable = true;
-            }
-        } catch (err) {
-            console.log('Update check failed:', err.message);
-        }
-    }
-
-    _isNewerVersion(remote, current) {
-        const remoteParts = remote.split('.').map(Number);
-        const currentParts = current.split('.').map(Number);
-
-        for (let i = 0; i < Math.max(remoteParts.length, currentParts.length); i++) {
-            const r = remoteParts[i] || 0;
-            const c = currentParts[i] || 0;
-            if (r > c) return true;
-            if (r < c) return false;
-        }
-        return false;
-    }
-
-    async _openUpdatePage() {
-        const { ipcRenderer } = require('electron');
-        await ipcRenderer.invoke('open-external', 'https://cheatingdaddy.com');
-    }
 
     disconnectedCallback() {
         super.disconnectedCallback();
@@ -321,14 +284,6 @@ export class AppHeader extends LitElement {
                 : ''}
                     ${this.currentView === 'main'
                 ? html`
-                              ${this.updateAvailable ? html`
-                                  <button class="update-button" @click=${this._openUpdatePage}>
-                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
-                                          <path fill-rule="evenodd" d="M13.836 2.477a.75.75 0 0 1 .75.75v3.182a.75.75 0 0 1-.75.75h-3.182a.75.75 0 0 1 0-1.5h1.37l-.84-.841a4.5 4.5 0 0 0-7.08.932.75.75 0 0 1-1.3-.75 6 6 0 0 1 9.44-1.242l.842.84V3.227a.75.75 0 0 1 .75-.75Zm-.911 7.5A.75.75 0 0 1 13.199 11a6 6 0 0 1-9.44 1.241l-.84-.84v1.371a.75.75 0 0 1-1.5 0V9.591a.75.75 0 0 1 .75-.75H5.35a.75.75 0 0 1 0 1.5H3.98l.841.841a4.5 4.5 0 0 0 7.08-.932.75.75 0 0 1 1.025-.273Z" clip-rule="evenodd" />
-                                      </svg>
-                                      Update available
-                                  </button>
-                              ` : ''}
                               <button class="icon-button" @click=${this.onHistoryClick} title="History">
                                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                                       <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd" />

@@ -63,6 +63,13 @@ During critical real-time conversations (interviews, sales calls, negotiations),
    - マイク + システム音声の同時キャプチャ
    - 話者識別でコンテキスト把握
 
+5. **3タブ統合セッションUI / Tabbed Session Interface**
+   - **Assistant タブ (A)**: AIの応答をリアルタイム表示、Markdown対応、応答ナビゲーション
+   - **Translation タブ (T)**: 28言語のリアルタイム翻訳、話者ラベル付きサイドバイサイド表示
+   - **Screen タブ (S)**: 自動/手動スクリーンショットのAI分析、タイムスタンプ・サムネイル・検索機能付き
+   - キーボードショートカット（A/T/S/Tab）で瞬時にタブ切替
+   - 新しい分析結果が届くとインジケータで通知
+
 ---
 
 ## 🎬 デモ動画 / Demo Video
@@ -99,11 +106,12 @@ During critical real-time conversations (interviews, sales calls, negotiations),
 ├─────────────────────────────────────────────────────────────┤
 │  ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐  │
 │  │ AssistantView│  │ NotesParser  │  │ RAG Retrieval   │  │
-│  │ (Live UI)    │  │ (Dual-Layer) │  │ Engine          │  │
+│  │ (Tabbed UI)  │  │ (Dual-Layer) │  │ Engine          │  │
 │  └──────────────┘  └──────────────┘  └─────────────────┘  │
 │         │                  │                    │            │
 │  ┌──────▼──────────────────▼────────────────────▼────────┐ │
-│  │     Response Display & Markdown Rendering             │ │
+│  │  [Assistant(A)] [Translation(T)] [Screen(S)]          │ │
+│  │  Response | Side-by-Side Translation | Screen Analysis│ │
 │  └─────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
                             │
@@ -113,15 +121,19 @@ During critical real-time conversations (interviews, sales calls, negotiations),
                  │  - Audio Stream     │
                  │  - Embeddings       │
                  │  - OCR              │
+                 │  - Screen Analysis  │
+                 │  - Translation      │
                  └─────────────────────┘
 ```
 
 ### データフロー:
-1. **音声入力** → PCM変換 → Gemini WebSocket
+1. **音声入力** → PCM変換 → Gemini WebSocket → Assistant タブに応答表示
 2. **AI応答** → ノーツパーサー → 可視レイヤー/サイレントレイヤー分離
 3. **文書アップロード** → チャンキング → 埋め込み生成 → ローカルJSON保存
 4. **会話進行** → RAGエンジン → 関連チャンク取得 → コンテキスト注入
-5. **セッション終了** → 構造化メモ生成 → .docx出力
+5. **翻訳** → 発話検出 → バッファリング → Gemini翻訳API → Translation タブにサイドバイサイド表示
+6. **画面分析** → スクリーンショット取得 → Gemini Vision API → Screen タブに結果表示（サムネイル付き）
+7. **セッション終了** → 構造化メモ生成 → .docx出力
 
 ---
 
@@ -210,6 +222,17 @@ audioWorkletNode.port.onmessage = (e) => {
 ```
 - **効果**: キーボード・マウス操作不要、完全ハンズフリー
 - **UX**: 自然な会話フローを維持
+
+#### 5. 3タブ統合セッションUI / Tabbed Session Interface
+```javascript
+// 3つのタブで異なる情報を同時に提供
+// Assistant (A): AI応答表示（Markdown対応）
+// Translation (T): リアルタイム翻訳（28言語、サイドバイサイド）
+// Screen (S): スクリーンショットAI分析（自動/手動、検索可能）
+const showTabs = this.translationEnabled || this.screenAnalyses.length > 0;
+```
+- **効果**: 会話中に必要な情報を瞬時に切替（キーボードショートカットA/T/S/Tab）
+- **UX**: 不要な機能はタブバーごと非表示、必要な時のみ表示
 
 ### 【実装品質と拡張性】Implementation Quality & Scalability
 
@@ -588,6 +611,58 @@ canRetrieve() {
 
 ---
 
+## The Tabbed Session Interface: Three Views Into One Conversation
+
+During an active session, the user sees three distinct tabs, each serving a different purpose. The key design decision: all three tabs operate simultaneously over the same live audio session, but present information in fundamentally different ways.
+
+### Assistant Tab (A) -- The Primary View
+
+This is the standard AI response display. Gemini listens to audio and generates text responses that appear here with full markdown rendering -- code blocks, tables, lists, headings. Responses are navigable (previous/next) and scrollable. Co-Pilot notes are parsed and stripped from this view silently.
+
+### Translation Tab (T) -- Real-Time Bilingual Display
+
+When translation is enabled (28 supported languages), this tab displays a side-by-side column layout:
+
+```
+┌────────────────────┬────────────────────┐
+│  Japanese (Source)  │  English (Target)  │
+├────────────────────┼────────────────────┤
+│  SPEAKER            │  SPEAKER            │
+│  彼の経験について... │  About his          │
+│                     │  experience...      │
+│  USER               │  USER               │
+│  はい、3年間...     │  Yes, for 3 years...│
+└────────────────────┴────────────────────┘
+```
+
+The translation pipeline buffers speech until sentence boundaries (or 8 words), queues requests (max 3 concurrent), and routes results exclusively to this tab. Speaker labels (USER/SPEAKER) help track who said what across both languages.
+
+### Screen Tab (S) -- AI-Powered Screen Analysis
+
+This is the newest addition. Screenshots are captured either automatically (on a configurable interval) or manually via the "Analyze screen" button. Each capture is sent to the Gemini Vision API for analysis, and the results are displayed as timestamped entries with:
+
+- **Timestamp** and **model** metadata
+- **AI analysis text** (what Gemini sees on screen)
+- **Screenshot thumbnail** (clickable, with the original base64 image)
+- **Search** to filter analyses by content
+- **Clear All** to reset history
+
+Screen analyses are routed exclusively to the Screen tab -- they never appear in the Assistant tab. When new analyses arrive while the user is on another tab, a green dot indicator appears on the Screen tab label.
+
+```javascript
+// Tab switching via keyboard shortcuts
+if (e.key === 'a') this._activeTab = 'assistant';
+if (e.key === 't') this._activeTab = 'translation';
+if (e.key === 's') this._activeTab = 'screen';
+if (e.key === 'Tab') {
+    // Cycle: assistant -> translation -> screen -> assistant
+}
+```
+
+The tab bar itself only appears when at least one secondary feature is active (translation enabled or screen analyses exist). When neither is active, the full viewport is the Assistant view with no tabs -- zero UI overhead for users who don't need these features.
+
+---
+
 ## A Session From Start to Finish
 
 To make this concrete, here's what a complete Co-Pilot session looks like:
@@ -596,9 +671,9 @@ To make this concrete, here's what a complete Co-Pilot session looks like:
 
 **2. Session start.** The app establishes a WebSocket connection to Gemini's native audio model. The system prompt is assembled from the selected profile (Negotiation), the user's custom context, Co-Pilot behavioral instructions, and document references. Two audio streams begin: microphone input and system audio (the other person's voice).
 
-**3. Live session.** The AI listens to both audio streams with speaker diarization -- it knows who said what. Responses appear in the transparent overlay with markdown formatting and syntax highlighting. After each response, the RAG engine checks if new document context should be injected. Co-Pilot markers are stripped in real time, notes are accumulated silently.
+**3. Live session.** The AI listens to both audio streams with speaker diarization -- it knows who said what. The session UI presents three tabs: the **Assistant tab** shows AI responses with markdown formatting and syntax highlighting; the **Translation tab** (if enabled) displays side-by-side bilingual transcriptions; the **Screen tab** captures and analyzes what's on screen. After each response, the RAG engine checks if new document context should be injected. Co-Pilot markers are stripped in real time, notes are accumulated silently.
 
-**4. Mid-session.** Twenty minutes in, the conversation drifts to unrelated topics. The AI injects `[REFOCUS: The budget discussion hasn't addressed the ROI data from the performance report yet]`. Meanwhile, the RAG engine has noticed the conversation is now about Q1 results and injects relevant chunks from the financial plan.
+**4. Mid-session.** Twenty minutes in, the conversation drifts to unrelated topics. The AI injects `[REFOCUS: The budget discussion hasn't addressed the ROI data from the performance report yet]`. Meanwhile, the RAG engine has noticed the conversation is now about Q1 results and injects relevant chunks from the financial plan. On the Screen tab, periodic screenshots have captured the other party's presentation slides, and Gemini's analysis highlights key figures that could strengthen the user's position.
 
 **5. Session close.** The user presses the close shortcut. The app saves the conversation history, accumulated notes, and Co-Pilot prep data. It navigates to the Summary view.
 
@@ -729,33 +804,45 @@ This works, but it means screen analysis quality degrades silently when you hit 
 - AIは他のすべてに集中する：発言内容の追跡、関連情報の検索、フォローアップの必要性の記録、忘れるべきでないことの記憶
 
 このプロジェクトは：
-- **9,000行のJavaScript** / 30ファイル
+- **9,000行以上のJavaScript** / 30+ファイル
 - **本番依存3つのみ**
+- **3タブ統合セッションUI**（Assistant/Translation/Screen）
 - **Windows, macOS, Linux対応**
 - **最も重要な機能: そこにあることを忘れさせる**
 
 ### Google Gemini APIの活用
 
-このプロジェクトは、**Gemini APIの3つのコア機能**を最大限に活用しています：
+このプロジェクトは、**Gemini APIの5つのコア機能**を最大限に活用しています：
 
-1. **Gemini Live（音声ストリーミング）**
+1. **Gemini Live（音声ストリーミング）** → Assistant タブ
    - WebSocket経由の直接PCM送信
    - 低レイテンシー（~500ms）のリアルタイム応答
    - 話者識別による文脈把握
 
-2. **Embeddings API（text-embedding-004）**
+2. **Embeddings API（text-embedding-004）** → RAGエンジン
    - 1,500文字チャンクの高精度ベクトル化
    - コサイン類似度による関連文書検索
    - 100チャンク/バッチの並列処理
 
-3. **Vision API（OCR）**
+3. **Vision API（OCR + Screen Analysis）** → Screen タブ
    - PDF、画像、Word文書からのテキスト抽出
    - 手書きメモのデジタル化
-   - 多言語対応（日本語、英語等）
+   - 自動/手動スクリーンショットのAI分析
+   - 画面上の情報をリアルタイムで解釈・要約
+
+4. **Translation API（HTTP）** → Translation タブ
+   - 28言語間のリアルタイム翻訳
+   - 文境界バッファリングによる自然な翻訳品質
+   - 最大3並行翻訳リクエスト、20キュー制限
+   - 話者ラベル付きサイドバイサイド表示
+
+5. **Summary Generation（HTTP）** → セッション後
+   - セッション全体の構造化サマリー生成
+   - .docx形式でのエクスポート
 
 **Geminiの選定理由:**
 - OpenAI Realtime APIより低コスト
-- 単一SDK内でマルチモーダル処理
+- 単一SDK内でマルチモーダル処理（音声、画像、テキスト、翻訳、埋め込み）
 - 無料枠でも十分な実用性
 
 ### 技術的課題と解決策
@@ -801,9 +888,10 @@ function convertStereoToMono(stereoBuffer) {
 ## 🚀 今後の展開 / Future Roadmap
 
 ### Phase 1: コア機能強化
-- [ ] マルチ言語サポート（日本語、韓国語、スペイン語等）
+- [x] リアルタイム翻訳機能（28言語対応、Translation タブでサイドバイサイド表示）
+- [x] スクリーン分析タブ（自動/手動キャプチャ、AI分析、検索・サムネイル付き）
+- [x] 3タブ統合セッションUI（Assistant/Translation/Screen、キーボードショートカット対応）
 - [ ] OpenAI Realtime API対応（選択可能なバックエンド）
-- [ ] リアルタイム翻訳機能（Gemini 2.0活用）
 
 ### Phase 2: エンタープライズ機能
 - [ ] チームでのセッション共有（Firestore統合）
@@ -862,7 +950,9 @@ npm run make
 1. プロファイル選択 → カスタムコンテキスト入力
 2. `Start Session`ボタン
 3. マイクとシステム音声が自動キャプチャ開始
-4. 透明オーバーレイにリアルタイム応答表示
+4. 透明オーバーレイにリアルタイム応答表示（Assistant タブ）
+5. 翻訳有効時はTranslation タブ (T) でサイドバイサイド翻訳表示
+6. Screen タブ (S) で手動/自動スクリーンショットのAI分析確認
 
 #### Co-Pilotモード（推奨）
 1. `Prepare Session`ボタン
@@ -882,6 +972,10 @@ npm run make
 | 前の応答 | `Cmd+[` | `Ctrl+[` |
 | 次の応答 | `Cmd+]` | `Ctrl+]` |
 | 緊急消去 | `Cmd+Shift+E` | `Ctrl+Shift+E` |
+| Assistant タブ | `A` | `A` |
+| Translation タブ | `T` | `T` |
+| Screen タブ | `S` | `S` |
+| タブ切替 (サイクル) | `Tab` | `Tab` |
 
 ---
 
@@ -983,11 +1077,17 @@ The AI provides suggestions; the human makes decisions and speaks in their own v
 
 リモート時代において、**リアルタイム会話中のAIアシスト**は多くの人が求めているが、既存ソリューションは「見える」「遅い」「文脈を理解しない」という根本的問題を抱えていました。
 
-**Assistant**は、以下の3つのコア技術で、この課題を包括的に解決します：
+**Assistant**は、以下の5つのコア技術で、この課題を包括的に解決します：
 
 1. **ゴーストウィンドウ** - 完全不可視化による自然な使用体験
 2. **デュアルレイヤー応答** - 会話と記録の両立
 3. **動的RAG** - 文脈に応じた知識の注入
+4. **リアルタイム翻訳** - 28言語間のサイドバイサイド翻訳表示
+5. **スクリーン分析** - 画面上の情報をAIが自動解釈
+
+### 3タブ統合セッションUI
+
+セッション中、Assistant/Translation/Screenの3タブで異なる情報を同時提供。キーボードショートカット（A/T/S/Tab）で瞬時に切替。不要な機能はタブバーごと非表示にし、UIの複雑さを最小化。
 
 ### 技術的独自性
 
@@ -995,6 +1095,7 @@ The AI provides suggestions; the human makes decisions and speaks in their own v
 - プロンプトエンジニアリングによる構造化マーカー（`[NOTES]`, `[REFOCUS]`等）
 - 会話履歴ベースのクエリ生成による動的RAG
 - ネイティブ音声ストリーミング（WebSocket/PCM）
+- 3タブUI: 同一セッション上で応答・翻訳・画面分析を統合
 
 ### 実用性とスケーラビリティ
 
