@@ -789,6 +789,11 @@ api.on('save-screen-analysis', async (data) => {
             customPrompt: data.customPrompt
         });
         console.log('Screen analysis saved:', data.sessionId);
+
+        // Forward to AssistantApp for display in Screen Analysis tab
+        if (assistantApp && data.analysis) {
+            assistantApp.addScreenAnalysis(data.analysis);
+        }
     } catch (error) {
         console.error('Error saving screen analysis:', error);
     }

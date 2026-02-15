@@ -121,6 +121,7 @@ export class AssistantApp extends LitElement {
         translationEnabled: { type: Boolean },
         _translationSourceLanguage: { state: true },
         _translationTargetLanguage: { state: true },
+        screenAnalyses: { type: Array },
     };
 
     constructor() {
@@ -152,6 +153,7 @@ export class AssistantApp extends LitElement {
         this.accumulatedNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
         this._copilotSessionId = null;
         this.translationEnabled = false;
+        this.screenAnalyses = [];
         this._translationSourceLanguage = '';
         this._translationTargetLanguage = '';
 
@@ -262,6 +264,11 @@ export class AssistantApp extends LitElement {
                 this.addNewResponse(data.message);
             }));
         }
+
+        // Set up event listener for clear screen history
+        this.addEventListener('clear-screen-history', () => {
+            this.clearScreenAnalyses();
+        });
     }
 
     disconnectedCallback() {
@@ -295,6 +302,23 @@ export class AssistantApp extends LitElement {
         } else {
             this.addNewResponse(response);
         }
+    }
+
+    // Screen analysis management
+    addScreenAnalysis(analysis) {
+        this.screenAnalyses = [...this.screenAnalyses, analysis];
+        // Notify AssistantView about new screen analysis (for dot indicator)
+        const assistantView = this.shadowRoot.querySelector('assistant-view');
+        if (assistantView && assistantView._activeTab !== 'screen') {
+            assistantView._hasNewScreenAnalyses = true;
+            assistantView.requestUpdate();
+        }
+        this.requestUpdate();
+    }
+
+    clearScreenAnalyses() {
+        this.screenAnalyses = [];
+        this.requestUpdate();
     }
 
     // Header event handlers
@@ -422,6 +446,7 @@ export class AssistantApp extends LitElement {
         // Pass the screenshot interval as string (including 'manual' option)
         assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
         this.responses = [];
+        this.screenAnalyses = []; // Reset screen analyses for new session
         this.currentResponseIndex = -1;
         this.startTime = Date.now();
         this.currentView = 'assistant';
@@ -472,6 +497,7 @@ export class AssistantApp extends LitElement {
         await assistant.initializeGemini(this.selectedProfile, this.selectedLanguage, prepData);
         assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
         this.responses = [];
+        this.screenAnalyses = []; // Reset screen analyses for new session
         this.currentResponseIndex = -1;
         this.startTime = Date.now();
         this.currentView = 'assistant';
@@ -636,6 +662,7 @@ export class AssistantApp extends LitElement {
                         .translationEnabled=${this.translationEnabled}
                         .translationSourceLanguage=${this._translationSourceLanguage}
                         .translationTargetLanguage=${this._translationTargetLanguage}
+                        .screenAnalyses=${this.screenAnalyses}
                         @response-index-changed=${this.handleResponseIndexChanged}
                         @notes-updated=${(e) => {
                         this.accumulatedNotes = e.detail.notes;

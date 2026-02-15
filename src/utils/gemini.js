@@ -124,7 +124,7 @@ function saveConversationTurn(transcription, aiResponse) {
     });
 }
 
-function saveScreenAnalysis(prompt, response, model) {
+function saveScreenAnalysis(prompt, response, model, imageData = null) {
     if (!currentSessionId) {
         initializeNewSession();
     }
@@ -133,7 +133,8 @@ function saveScreenAnalysis(prompt, response, model) {
         timestamp: Date.now(),
         prompt: prompt,
         response: response.trim(),
-        model: model
+        model: model,
+        imageData: imageData // Include screenshot thumbnail
     };
 
     screenAnalysisHistory.push(analysisEntry);
@@ -656,26 +657,20 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
         // Increment count after successful call
         incrementLimitCount(model);
 
-        // Stream the response
+        // Stream the response (DO NOT send to Assistant tab - only to Screen tab)
         let fullText = '';
-        let isFirst = true;
         for await (const chunk of response) {
             const chunkText = chunk.text;
             if (chunkText) {
                 fullText += chunkText;
-                // Send to renderer - new response for first chunk, update for subsequent
-                sendToRenderer(isFirst ? 'new-response' : 'update-response', fullText);
-                isFirst = false;
             }
         }
 
         console.log(`Image response completed from ${model}`);
 
-        // Save screen analysis to history
-        saveScreenAnalysis(effectivePrompt, fullText, model);
-
-        // Notify renderer that response is complete
-        sendToRenderer('response-complete', { model: model });
+        // Save screen analysis to history (this sends to Screen tab only)
+        // Include base64 image data for thumbnail display
+        saveScreenAnalysis(effectivePrompt, fullText, model, base64Data);
 
         return { success: true, text: fullText, model: model };
     } catch (error) {
