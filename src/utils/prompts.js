@@ -1,3 +1,22 @@
+// BCP-47 code to human-readable language name for prompt injection
+const BCP47_LANGUAGE_NAMES = {
+    'en-US': 'English', 'en-GB': 'English', 'en-AU': 'English', 'en-IN': 'English',
+    'de-DE': 'German', 'es-US': 'Spanish', 'es-ES': 'Spanish',
+    'fr-FR': 'French', 'fr-CA': 'French', 'hi-IN': 'Hindi',
+    'pt-BR': 'Portuguese', 'ar-XA': 'Arabic', 'id-ID': 'Indonesian',
+    'it-IT': 'Italian', 'ja-JP': 'Japanese', 'tr-TR': 'Turkish',
+    'vi-VN': 'Vietnamese', 'bn-IN': 'Bengali', 'gu-IN': 'Gujarati',
+    'kn-IN': 'Kannada', 'ml-IN': 'Malayalam', 'mr-IN': 'Marathi',
+    'ta-IN': 'Tamil', 'te-IN': 'Telugu', 'nl-NL': 'Dutch',
+    'ko-KR': 'Korean', 'cmn-CN': 'Mandarin Chinese',
+    'pl-PL': 'Polish', 'ru-RU': 'Russian', 'th-TH': 'Thai',
+};
+
+function getLanguageName(bcp47Code) {
+    if (!bcp47Code) return null;
+    return BCP47_LANGUAGE_NAMES[bcp47Code] || null;
+}
+
 const profilePrompts = {
     interview: {
         intro: `You are an AI-powered interview assistant, designed to act as a discreet on-screen teleprompter. Your mission is to help the user excel in their job interview by providing detailed, impactful, and professional answers. Analyze the ongoing interview dialogue and, crucially, the 'User-provided context' below for maximum relevance.`,
@@ -211,7 +230,7 @@ Provide educational responses in **markdown format**. Focus on building understa
 
 const { buildCoPilotContext, buildCoPilotInstructions } = require('./copilotPrompts');
 
-function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled = true, copilotPrep = null, hasEmbeddings = false) {
+function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled = true, copilotPrep = null, hasEmbeddings = false, language = null) {
     const sections = [promptParts.intro, '\n\n', promptParts.formatRequirements];
 
     // Only add search usage section if Google Search is enabled
@@ -228,6 +247,12 @@ function buildSystemPrompt(promptParts, customPrompt = '', googleSearchEnabled =
   - "I didn't quite catch that. Could you provide more details?"
 - Do NOT spend time trying to interpret meaningless or random text - respond quickly asking for clarification
 - For legitimate but brief inputs, provide helpful responses as normal`);
+
+    // Add language instruction for non-English languages
+    const languageName = getLanguageName(language);
+    if (languageName && language && !language.startsWith('en')) {
+        sections.push('\n\n', `**LANGUAGE REQUIREMENT:**\nYou MUST respond entirely in **${languageName}**. All your output must be in ${languageName}. Do not respond in English unless the user explicitly asks for English.`);
+    }
 
     sections.push('\n\n', promptParts.content);
 
@@ -259,7 +284,7 @@ Provide direct, professional responses in **markdown format**.`,
 
 const PASSIVE_LISTENER_PROMPT = `You are a passive listener and transcription assistant. Your ONLY job is to accurately transcribe the conversation you hear. Do NOT generate coaching, advice, suggestions, or conversational responses of any kind. Focus entirely on accurate speech recognition and transcription. Stay silent unless transcribing speech.`;
 
-function getSystemPrompt(profile, customPrompt = '', googleSearchEnabled = true, copilotPrep = null, customProfileData = null, hasEmbeddings = false, passiveMode = false) {
+function getSystemPrompt(profile, customPrompt = '', googleSearchEnabled = true, copilotPrep = null, customProfileData = null, hasEmbeddings = false, passiveMode = false, language = null) {
     if (passiveMode) {
         return PASSIVE_LISTENER_PROMPT;
     }
@@ -269,10 +294,11 @@ function getSystemPrompt(profile, customPrompt = '', googleSearchEnabled = true,
     } else {
         promptParts = profilePrompts[profile] || profilePrompts.interview;
     }
-    return buildSystemPrompt(promptParts, customPrompt, googleSearchEnabled, copilotPrep, hasEmbeddings);
+    return buildSystemPrompt(promptParts, customPrompt, googleSearchEnabled, copilotPrep, hasEmbeddings, language);
 }
 
 module.exports = {
     profilePrompts,
     getSystemPrompt,
+    getLanguageName,
 };

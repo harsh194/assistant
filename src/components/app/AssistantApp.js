@@ -461,7 +461,7 @@ export class AssistantApp extends LitElement {
         if (this.selectedFeatures.assistant || this.selectedFeatures.translation) {
             const options = this.selectedFeatures.assistant ? {} : { suppressAssistant: true };
             await assistant.initializeGemini(this.selectedProfile, this.selectedLanguage, null, options);
-            assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
+            assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality, !!this.selectedFeatures.screenAnalysis);
         } else if (this.selectedFeatures.screenAnalysis) {
             // Screen-only mode: no live session, no audio
             assistant.startCaptureScreenOnly(this.selectedImageQuality);
@@ -524,7 +524,7 @@ export class AssistantApp extends LitElement {
         if (features.assistant || features.translation) {
             const options = features.assistant ? {} : { suppressAssistant: true };
             await assistant.initializeGemini(this.selectedProfile, this.selectedLanguage, prepData, options);
-            assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
+            assistant.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality, !!features.screenAnalysis);
         } else if (features.screenAnalysis) {
             assistant.startCaptureScreenOnly(this.selectedImageQuality);
         }

@@ -14,7 +14,6 @@ on:
 jobs:
   build:
     strategy:
-      fail-fast: false
       matrix:
         include:
           - os: macos-latest
@@ -42,28 +41,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Package app
-        run: npm run package
+      - name: Build app
+        run: npm run make
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create ZIP archive
-        run: |
-          cd out
-          if [ "${{ matrix.platform }}" = "win32" ]; then
-            powershell Compress-Archive -Path "Assistant-${{ matrix.platform }}-${{ matrix.arch }}/*" -DestinationPath "Assistant-${{ matrix.platform }}-${{ matrix.arch }}.zip"
-          else
-            zip -r "Assistant-${{ matrix.platform }}-${{ matrix.arch }}.zip" "Assistant-${{ matrix.platform }}-${{ matrix.arch }}"
-          fi
-        shell: bash
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: assistant-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            out/Assistant-${{ matrix.platform }}-${{ matrix.arch }}.zip
-          if-no-files-found: error
+            out/make/**/*.dmg
+            out/make/**/*.zip
+            out/make/**/*.exe
+            out/make/**/*.deb
+            out/make/**/*.rpm
+          if-no-files-found: ignore
 
   release:
     needs: build
@@ -87,39 +80,34 @@ jobs:
           name: Assistant ${{ github.ref_name || github.event.inputs.version }}
           body: |
             ## Download Assistant
-
+            
             Choose the right version for your system:
-
+            
             ### macOS
-            - **Apple Silicon (M1/M2/M3)**: Download `Assistant-darwin-arm64.zip`
-
+            - **Apple Silicon (M1/M2/M3)**: Download the `.dmg` file
+            
             ### Windows
-            - Download `Assistant-win32-x64.zip`
-
+            - Download the `.exe` installer
+            
             ### Linux
-            - Download `Assistant-linux-x64.zip`
-
-            ### Installation
-            1. Download the ZIP file for your platform
-            2. Extract the ZIP file
-            3. Run the Assistant app from the extracted folder
-            4. Get a [Gemini API key](https://aistudio.google.com/apikey)
-            5. Enter your API key in the app
-
-            ### macOS Users
-            After extracting, you may need to run this command to bypass Gatekeeper:
-            ```bash
-            xattr -cr /path/to/Assistant.app
-            ```
-
+            - Download the `.deb` (Debian/Ubuntu) package
+            
+            ### Setup
+            1. Download and install the app
+            2. Get a [Gemini API key](https://aistudio.google.com/apikey)
+            3. Enter your API key in the app
+            4. Start using Assistant!
+            
             ---
-
+            
             **Note**: This app requires your own Gemini API key (free tier available).
-
-            ## Fixed in this release
-            - Translation function now works correctly in deployed apps
           files: |
+            artifacts/**/*.dmg
             artifacts/**/*.zip
+            artifacts/**/*.exe
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.AppImage
           draft: false
           prerelease: false
         env:

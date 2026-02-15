@@ -21,7 +21,7 @@
         "name": "Harsh",
         "email": "harshranjan194@gmail.com"
     },
-    "license": "GPL-3.0",
+    "license": "MIT",
     "dependencies": {
         "@google/genai": "^1.2.0",
         "docx": "^9.5.1",

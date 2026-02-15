@@ -8,10 +8,8 @@ let audioProcessor = null;
 let micAudioProcessor = null;
 let audioBuffer = [];
 const SAMPLE_RATE = 24000;
-// const AUDIO_CHUNK_DURATION = 0.1; // seconds
-const AUDIO_CHUNK_DURATION = 0.05; // seconds
-// const BUFFER_SIZE = 4096; // Increased buffer size for smoother audio
-const BUFFER_SIZE = 2048; // Increased buffer size for smoother audio
+const AUDIO_CHUNK_DURATION = 0.04; // 40ms chunks for lower latency
+const BUFFER_SIZE = 1024; // Smaller buffer for ~42ms callback intervals
 
 let hiddenVideo = null;
 let offscreenCanvas = null;
@@ -230,7 +228,7 @@ api.on('update-status', (status) => {
     isAiBusy = busyStatuses.some(s => status.toLowerCase().includes(s.toLowerCase()));
 });
 
-async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'medium') {
+async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'medium', screenAnalysisEnabled = false) {
     // Store the image quality for manual screenshots
     currentImageQuality = imageQuality;
 
@@ -392,22 +390,26 @@ async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'mediu
             videoTrack: mediaStream.getVideoTracks()[0]?.getSettings(),
         });
 
-        // Check if auto screen capture is enabled
-        const prefs = preferencesCache || {};
-        const screenCaptureEnabled = prefs.screenCaptureEnabled ?? false;
+        // Only start auto screen capture if screen analysis feature is enabled for this session
+        if (screenAnalysisEnabled) {
+            const prefs = preferencesCache || {};
+            const screenCaptureEnabled = prefs.screenCaptureEnabled ?? false;
 
-        if (screenCaptureEnabled) {
-            const intervalSec = prefs.screenCaptureInterval ?? 5;
-            console.log(`Auto screen capture enabled - capturing every ${intervalSec}s`);
-            screenshotInterval = setInterval(() => {
-                if (isAiBusy) {
-                    console.log('Skipping auto-capture - AI is busy processing');
-                    return;
-                }
-                captureScreenshot(imageQuality);
-            }, intervalSec * 1000);
+            if (screenCaptureEnabled) {
+                const intervalSec = prefs.screenCaptureInterval ?? 5;
+                console.log(`Auto screen capture enabled - capturing every ${intervalSec}s`);
+                screenshotInterval = setInterval(() => {
+                    if (isAiBusy) {
+                        console.log('Skipping auto-capture - AI is busy processing');
+                        return;
+                    }
+                    captureScreenshot(imageQuality);
+                }, intervalSec * 1000);
+            } else {
+                console.log('Auto screen capture disabled - screenshots captured on demand only');
+            }
         } else {
-            console.log('Auto screen capture disabled - screenshots captured on demand only');
+            console.log('Screen analysis not selected for this session - skipping auto-capture');
         }
     } catch (err) {
         console.error('Error starting capture:', err);
