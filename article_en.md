@@ -23,7 +23,7 @@ During critical real-time conversations (interviews, sales calls, negotiations),
 
 1. **Visibility Problem** - AI usage becomes visible through screen sharing/recording
 2. **Operation Delay** - Time lost switching windows with Alt+Tab
-3. **Lack of Context** - AI doesn't understand conversation context or background
+3. **Lack of Context** - AI doesn't understand real-time conversation context or background
 4. **Note-taking Burden** - Taking notes during conversation breaks concentration
 
 ### Solution Features
@@ -158,8 +158,8 @@ With remote work becoming the norm, online interviews, sales calls, and meetings
 **What makes this project novel:**
 - A window completely invisible to screen capture APIs (`setContentProtection(true)`)
 - Fully hands-free operation via audio streaming
-- Dual-layer responses through prompt engineering (patent-worthy originality)
-- Dynamic RAG based on conversation context (not static prompt injection)
+- Dual-layer responses through prompt engineering
+- Dynamic RAG based on conversation context
 
 ### Solution Effectiveness
 
@@ -264,7 +264,6 @@ const profilePrompts = {
 };
 ```
 - **Customization**: Users can create their own AI profiles
-- **Plugin architecture**: Easy to switch to other AI models (OpenAI, etc.)
 
 ---
 
