@@ -40,10 +40,10 @@ let translationConfig = { sourceLanguage: '', targetLanguage: '' };
 let translationBuffer = '';
 let translationQueue = [];
 let translationBatchTimer = null;
-const TRANSLATION_BATCH_DELAY = 500;
-const TRANSLATION_WORD_THRESHOLD = 8;
-const TRANSLATION_CHAR_THRESHOLD = 30;
-const MAX_CONCURRENT_TRANSLATIONS = 3;
+const TRANSLATION_BATCH_DELAY = 300; // Allow time for ~10 words to accumulate
+const TRANSLATION_WORD_THRESHOLD = 10; // Translate in chunks of ~10 words
+const TRANSLATION_CHAR_THRESHOLD = 45; // Adjusted for ~10 word chunks
+const MAX_CONCURRENT_TRANSLATIONS = 10; // Cloud API can handle many concurrent requests
 let activeTranslations = 0;
 const MAX_TRANSLATION_QUEUE = 20;
 let translationApiKey = null;
@@ -52,6 +52,7 @@ let translationPendingId = 0;
 let translationBufferSpeaker = '';
 let googleCloudTranslationKey = null;
 let tentativeTranslationTimer = null;
+let liveUpdateTimer = null;
 
 const VALID_LANG_CODES = new Set([
     'en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'zh', 'ja', 'ko',
@@ -279,7 +280,7 @@ function resetResponseInactivityTimer() {
     }, 2000);
 }
 
-async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'interview', language = 'en-US', isReconnect = false, copilotPrep = null, customProfileData = null, options = {}) {
+async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'interview', language = 'en-US', isReconnect = false, copilotPrep = null, customProfileData = null, options = {}, googleTranslationKey = null) {
     if (isInitializingSession) {
         console.log('Session initialization already in progress');
         return false;
@@ -297,15 +298,11 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
 
     // Store params for reconnection
     if (!isReconnect) {
-        sessionParams = { apiKey, customPrompt, profile, language, copilotPrep, customProfileData, options };
+        sessionParams = { apiKey, customPrompt, profile, language, copilotPrep, customProfileData, options, googleTranslationKey };
         reconnectAttempts = 0;
         translationApiKey = apiKey;
-        try {
-            const storage = require('../storage');
-            googleCloudTranslationKey = storage.getGoogleTranslationApiKey() || null;
-        } catch (err) {
-            googleCloudTranslationKey = null;
-        }
+        googleCloudTranslationKey = googleTranslationKey || null;
+        console.log('Google Cloud Translation key configured:', !!googleCloudTranslationKey);
     }
 
     const client = new GoogleGenAI({
@@ -474,7 +471,8 @@ async function attemptReconnect() {
             true, // isReconnect
             sessionParams.copilotPrep,
             sessionParams.customProfileData,
-            sessionParams.options || {}
+            sessionParams.options || {},
+            sessionParams.googleTranslationKey || null
         );
 
         if (session && global.geminiSessionRef) {
@@ -668,7 +666,7 @@ async function sendAudioToGemini(base64Data, geminiSessionRef) {
     }
 }
 
-async function sendImageToGeminiHttp(base64Data, prompt) {
+async function sendImageToGeminiHttp(base64Data, prompt, language = 'en-US') {
     // Get available model based on rate limits
     const model = getAvailableModel();
 
@@ -677,7 +675,40 @@ async function sendImageToGeminiHttp(base64Data, prompt) {
         return { success: false, error: 'No API key configured' };
     }
 
-    const effectivePrompt = prompt || 'Describe what you see on the screen. If there is a question, answer it directly.';
+    const basePrompt = prompt || 'Describe what you see on the screen. If there is a question, answer it directly.';
+
+    // Map language codes to language names
+    const languageNames = {
+        'ja-JP': 'Japanese',
+        'es-ES': 'Spanish',
+        'es-US': 'Spanish',
+        'fr-FR': 'French',
+        'fr-CA': 'French',
+        'de-DE': 'German',
+        'cmn-CN': 'Chinese',
+        'ko-KR': 'Korean',
+        'pt-BR': 'Portuguese',
+        'it-IT': 'Italian',
+        'ru-RU': 'Russian',
+        'hi-IN': 'Hindi',
+        'ar-XA': 'Arabic',
+        'tr-TR': 'Turkish',
+        'id-ID': 'Indonesian',
+        'vi-VN': 'Vietnamese',
+        'th-TH': 'Thai',
+        'pl-PL': 'Polish',
+        'nl-NL': 'Dutch',
+        'en-US': 'English',
+        'en-GB': 'English',
+        'en-AU': 'English',
+        'en-IN': 'English',
+    };
+
+    const languageName = languageNames[language];
+    const languageInstruction = languageName && languageName !== 'English'
+        ? `\n\nIMPORTANT: Respond in ${languageName}.`
+        : '';
+    const effectivePrompt = basePrompt + languageInstruction;
 
     try {
         const ai = new GoogleGenAI({ apiKey: apiKey });
@@ -748,6 +779,10 @@ function resetTranslationState() {
         clearTimeout(tentativeTranslationTimer);
         tentativeTranslationTimer = null;
     }
+    if (liveUpdateTimer) {
+        clearTimeout(liveUpdateTimer);
+        liveUpdateTimer = null;
+    }
     googleCloudTranslationKey = null;
     lastTentativeCallTime = 0;
     translationBuffer = '';
@@ -782,21 +817,29 @@ function handleTranscriptionForTranslation(text, speakerInfo) {
 
     if (translationBatchTimer) clearTimeout(translationBatchTimer);
 
-    // Emit live update with current buffer state
-    sendToRenderer('translation-live-update', {
-        id: translationPendingId,
-        text: translationBuffer.trim(),
-        speaker: translationBufferSpeaker || speakerInfo || '',
-    });
+    // Debounce live updates to prevent showing character-by-character fragments
+    if (liveUpdateTimer) clearTimeout(liveUpdateTimer);
+    liveUpdateTimer = setTimeout(() => {
+        // Only send live update if buffer has meaningful content
+        const trimmed = translationBuffer.trim();
+        if (trimmed.length > 0) {
+            sendToRenderer('translation-live-update', {
+                id: translationPendingId,
+                text: trimmed,
+                speaker: translationBufferSpeaker || speakerInfo || '',
+            });
+        }
+    }, 200); // Wait 200ms before showing live update
 
-    // Schedule tentative translation if Cloud API key is configured
-    if (googleCloudTranslationKey) {
-        scheduleTentativeTranslation(
-            translationPendingId,
-            translationBuffer.trim(),
-            translationBufferSpeaker || speakerInfo || ''
-        );
-    }
+    // Tentative translation disabled - prevents fragmenting into 2-word chunks
+    // Only translate when reaching 10 words or sentence boundary
+    // if (googleCloudTranslationKey) {
+    //     scheduleTentativeTranslation(
+    //         translationPendingId,
+    //         translationBuffer.trim(),
+    //         translationBufferSpeaker || speakerInfo || ''
+    //     );
+    // }
 
     const trimmed = translationBuffer.trim();
     const hasSentenceEnd = /[.!?\u3002\uff01\uff1f\u061f\u0964]\s*$/.test(trimmed);
@@ -817,6 +860,12 @@ function flushTranslationBuffer(speakerInfo) {
     if (tentativeTranslationTimer) {
         clearTimeout(tentativeTranslationTimer);
         tentativeTranslationTimer = null;
+    }
+
+    // Clear live update timer since we're flushing
+    if (liveUpdateTimer) {
+        clearTimeout(liveUpdateTimer);
+        liveUpdateTimer = null;
     }
 
     const textToTranslate = translationBuffer.trim();
@@ -941,7 +990,7 @@ async function translateWithCloudAPI(text, sourceLang, targetLang) {
 }
 
 let lastTentativeCallTime = 0;
-const TENTATIVE_DEBOUNCE_MS = 150;
+const TENTATIVE_DEBOUNCE_MS = 30; // Minimal debounce for instant response
 
 function scheduleTentativeTranslation(id, text, speaker) {
     if (tentativeTranslationTimer) clearTimeout(tentativeTranslationTimer);
@@ -970,13 +1019,35 @@ function scheduleTentativeTranslation(id, text, speaker) {
     }, delay);
 }
 
+let cloudTranslationErrorLogged = false;
+
 async function translateText(text, sourceLang, targetLang) {
     // Try Cloud Translation API first (fast ~50-100ms)
     try {
         const cloudResult = await translateWithCloudAPI(text, sourceLang, targetLang);
-        if (cloudResult) return { success: true, translatedText: cloudResult };
+        if (cloudResult) {
+            cloudTranslationErrorLogged = false; // Reset flag on success
+            return { success: true, translatedText: cloudResult };
+        }
     } catch (err) {
-        console.warn('Cloud Translation failed, falling back to Gemini:', err.message);
+        // Log detailed instructions only once to avoid spam
+        if (!cloudTranslationErrorLogged) {
+            console.error('\n========================================');
+            console.error('Google Cloud Translation API Error');
+            console.error('========================================');
+            console.error('Error:', err.message);
+            console.error('\nThe API key is configured but the request is blocked.');
+            console.error('This usually means the Cloud Translation API is not enabled.');
+            console.error('\nTo fix this:');
+            console.error('1. Go to: https://console.cloud.google.com/apis/library/translate.googleapis.com');
+            console.error('2. Enable the "Cloud Translation API"');
+            console.error('3. Make sure billing is enabled for your Google Cloud project');
+            console.error('\nFalling back to Gemini API (slower but works)');
+            console.error('========================================\n');
+            cloudTranslationErrorLogged = true;
+        } else {
+            console.warn('Cloud Translation failed, using Gemini fallback');
+        }
     }
 
     const ai = getTranslationClient();
@@ -1012,8 +1083,8 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
     // Store the geminiSessionRef globally for reconnection access
     global.geminiSessionRef = geminiSessionRef;
 
-    ipcMain.handle('initialize-gemini', async (event, apiKey, customPrompt, profile = 'interview', language = 'en-US', copilotPrep = null, customProfileData = null, options = {}) => {
-        const session = await initializeGeminiSession(apiKey, customPrompt, profile, language, false, copilotPrep, customProfileData, options);
+    ipcMain.handle('initialize-gemini', async (event, apiKey, customPrompt, profile = 'interview', language = 'en-US', copilotPrep = null, customProfileData = null, options = {}, googleTranslationKey = null) => {
+        const session = await initializeGeminiSession(apiKey, customPrompt, profile, language, false, copilotPrep, customProfileData, options, googleTranslationKey);
         if (session) {
             geminiSessionRef.current = session;
             return true;
@@ -1068,7 +1139,7 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
         }
     });
 
-    ipcMain.handle('send-image-content', async (event, { data, prompt }) => {
+    ipcMain.handle('send-image-content', async (event, { data, prompt, language }) => {
         try {
             if (!data || typeof data !== 'string') {
                 console.error('Invalid image data received');
@@ -1085,7 +1156,7 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
             process.stdout.write('!');
 
             // Use HTTP API instead of realtime session
-            const result = await sendImageToGeminiHttp(data, prompt);
+            const result = await sendImageToGeminiHttp(data, prompt, language);
             return result;
         } catch (error) {
             console.error('Error sending image:', error);
@@ -1109,6 +1180,70 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
             return { success: true };
         } catch (error) {
             console.error('Error sending text:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // Test Google Cloud Translation API key
+    ipcMain.handle('test-cloud-translation-api', async (event, apiKey) => {
+        if (!apiKey) {
+            return { success: false, error: 'No API key provided' };
+        }
+
+        try {
+            const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`;
+            const body = { q: 'Hello', target: 'es', format: 'text' };
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                const errorMsg = (errorData.error?.message || `HTTP ${response.status}`).trim();
+                const lower = errorMsg.toLowerCase();
+
+                // Treat as "API not enabled" for various 403 messages (wrong project, not enabled, or disabled)
+                const looksLikeNotEnabled =
+                    lower.includes('access not configured') ||
+                    lower.includes('api has not been used') ||
+                    lower.includes('not enabled') ||
+                    lower.includes('is disabled') ||
+                    lower.includes('blocked');
+
+                if (looksLikeNotEnabled) {
+                    return {
+                        success: false,
+                        error: 'Cloud Translation API is not enabled for this project.',
+                        errorDetail: errorMsg,
+                        needsSetup: true
+                    };
+                }
+
+                // API key restriction: key valid but not allowed to call this API
+                if (lower.includes('not authorized') || lower.includes('restriction')) {
+                    return {
+                        success: false,
+                        error: 'This API key is not allowed to use Cloud Translation. In Google Cloud Console → APIs & Services → Credentials, edit the key and under "API restrictions" allow "Cloud Translation API".',
+                        errorDetail: errorMsg
+                    };
+                }
+
+                return { success: false, error: errorMsg };
+            }
+
+            const data = await response.json();
+            if (data.data?.translations?.[0]) {
+                return {
+                    success: true,
+                    message: 'Cloud Translation API is working! Translation will be faster (~50-100ms).'
+                };
+            }
+
+            return { success: false, error: 'Unexpected response format' };
+        } catch (error) {
             return { success: false, error: error.message };
         }
     });

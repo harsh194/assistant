@@ -201,13 +201,14 @@ async function initializeGemini(profile = 'interview', language = 'en-US', copil
     const apiKey = await storage.getApiKey();
     if (apiKey) {
         const prefs = await storage.getPreferences();
+        const googleTranslationKey = await storage.getGoogleTranslationApiKey();
         let customProfileData = null;
         if (profile.startsWith('custom-')) {
             const customProfiles = await storage.getCustomProfiles();
             const profileId = profile.replace('custom-', '');
             customProfileData = customProfiles.find(p => p.id === profileId) || null;
         }
-        const success = await api.invoke('initialize-gemini', apiKey, prefs.customPrompt || '', profile, language, copilotPrep, customProfileData, options);
+        const success = await api.invoke('initialize-gemini', apiKey, prefs.customPrompt || '', profile, language, copilotPrep, customProfileData, options, googleTranslationKey);
         if (success) {
             assistant.setStatus('Live');
         } else {
@@ -622,9 +623,14 @@ async function captureScreenshot(imageQuality = 'medium', isManual = false) {
                     return;
                 }
 
+                // Get user's selected language
+                const prefs = await assistant.storage.getPreferences();
+                const language = prefs.selectedLanguage || 'en-US';
+
                 const result = await api.invoke('send-image-content', {
                     data: base64data,
                     prompt: MANUAL_SCREENSHOT_PROMPT,
+                    language: language,
                 });
 
                 if (result.success) {
@@ -713,10 +719,15 @@ async function captureManualScreenshot(imageQuality = null) {
                     return;
                 }
 
+                // Get user's selected language
+                const prefs = await assistant.storage.getPreferences();
+                const language = prefs.selectedLanguage || 'en-US';
+
                 // Send image with prompt to HTTP API (response streams via IPC events)
                 const result = await api.invoke('send-image-content', {
                     data: base64data,
                     prompt: MANUAL_SCREENSHOT_PROMPT,
+                    language: language,
                 });
 
                 if (result.success) {
