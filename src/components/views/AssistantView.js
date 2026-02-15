@@ -456,6 +456,67 @@ export class AssistantView extends LitElement {
             color: var(--error-color);
             font-style: italic;
         }
+
+        /* Live caption - currently being spoken */
+        .translation-row.live {
+            opacity: 0.7;
+        }
+
+        .live-indicator {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background: #4CAF50;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+            animation: pulse-dot 1.2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+        }
+
+        /* Pending translation - awaiting result */
+        .translation-text.pending-shimmer {
+            position: relative;
+            color: transparent;
+            user-select: none;
+            overflow: hidden;
+            border-radius: 3px;
+            min-height: 1.5em;
+        }
+
+        .translation-text.pending-shimmer::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                90deg,
+                var(--bg-tertiary, #2a2a2a) 25%,
+                var(--bg-secondary, #333) 50%,
+                var(--bg-tertiary, #2a2a2a) 75%
+            );
+            background-size: 200% 100%;
+            animation: shimmer 1.5s ease-in-out infinite;
+            border-radius: 3px;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .translation-text.live-placeholder {
+            opacity: 0.3;
+            font-style: italic;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
     `;
 
     static properties = {
@@ -476,6 +537,8 @@ export class AssistantView extends LitElement {
         _copyFeedback: { state: true },
         _activeTab: { state: true }, // 'assistant' | 'translation' | 'screen'
         _translationEntries: { state: true },
+        _liveTranslationEntry: { state: true },
+        _pendingTranslationEntries: { state: true },
         _hasNewScreenAnalyses: { state: true },
     };
 
@@ -499,6 +562,8 @@ export class AssistantView extends LitElement {
         this._copyFeedback = false;
         this._activeTab = 'assistant'; // default to assistant tab
         this._translationEntries = [];
+        this._liveTranslationEntry = null;
+        this._pendingTranslationEntries = [];
         this._hasNewScreenAnalyses = false;
         this._sessionNotes = { keyPoints: [], decisions: [], openQuestions: [], actionItems: [], nextSteps: [] };
         this._lastParsedResponse = '';
@@ -695,8 +760,44 @@ export class AssistantView extends LitElement {
             // Translation result listener
             this._cleanups.push(window.electronAPI.on('translation-result', (data) => {
                 const MAX_ENTRIES = 500;
+
+                // Remove from pending entries by matching ID
+                if (data.id !== undefined) {
+                    this._pendingTranslationEntries = this._pendingTranslationEntries.filter(
+                        e => e.id !== data.id
+                    );
+                }
+
+                // Clear live entry if it matches this result
+                if (this._liveTranslationEntry && this._liveTranslationEntry.id === data.id) {
+                    this._liveTranslationEntry = null;
+                }
+
                 const updated = [...this._translationEntries, data];
                 this._translationEntries = updated.length > MAX_ENTRIES ? updated.slice(-MAX_ENTRIES) : updated;
+                if (this._activeTab === 'translation') {
+                    this.scrollTranslationToBottom();
+                }
+            }));
+
+            // Live translation update listener
+            this._cleanups.push(window.electronAPI.on('translation-live-update', (data) => {
+                if (data.flushed) {
+                    this._pendingTranslationEntries = [
+                        ...this._pendingTranslationEntries,
+                        { id: data.id, text: data.text, speaker: data.speaker }
+                    ];
+                    this._liveTranslationEntry = null;
+                } else if (data.text) {
+                    this._liveTranslationEntry = {
+                        id: data.id,
+                        text: data.text,
+                        speaker: data.speaker,
+                    };
+                } else {
+                    this._liveTranslationEntry = null;
+                }
+
                 if (this._activeTab === 'translation') {
                     this.scrollTranslationToBottom();
                 }
@@ -746,6 +847,8 @@ export class AssistantView extends LitElement {
         if (this.translationEnabled) {
             this._activeTab = 'assistant'; // Start on assistant tab
             this._translationEntries = [];
+            this._liveTranslationEntry = null;
+            this._pendingTranslationEntries = [];
         }
     }
 
@@ -1017,6 +1120,8 @@ export class AssistantView extends LitElement {
                 <div class="content-panel ${showTabs && this._activeTab === 'translation' ? 'active' : ''}">
                     <div class="translation-horizontal">
                         ${this._translationEntries.length === 0
+                            && this._pendingTranslationEntries.length === 0
+                            && !this._liveTranslationEntry
                             ? html`<div class="translation-empty">Listening for speech to translate...</div>`
                             : html`
                                 <div class="translation-columns">
@@ -1029,6 +1134,20 @@ export class AssistantView extends LitElement {
                                                     <div class="translation-text original">${entry.original}</div>
                                                 </div>
                                             `)}
+                                            ${this._pendingTranslationEntries.map(entry => html`
+                                                <div class="translation-row pending">
+                                                    ${entry.speaker ? html`<span class="translation-speaker">${entry.speaker}</span>` : ''}
+                                                    <div class="translation-text original">${entry.text}</div>
+                                                </div>
+                                            `)}
+                                            ${this._liveTranslationEntry ? html`
+                                                <div class="translation-row live">
+                                                    ${this._liveTranslationEntry.speaker ? html`<span class="translation-speaker">${this._liveTranslationEntry.speaker}</span>` : ''}
+                                                    <div class="translation-text original">
+                                                        <span class="live-indicator"></span>${this._liveTranslationEntry.text}
+                                                    </div>
+                                                </div>
+                                            ` : ''}
                                         </div>
                                     </div>
                                     <div class="translation-column">
@@ -1040,6 +1159,18 @@ export class AssistantView extends LitElement {
                                                     <div class="translation-text ${entry.error ? 'error' : ''}">${entry.translated}</div>
                                                 </div>
                                             `)}
+                                            ${this._pendingTranslationEntries.map(entry => html`
+                                                <div class="translation-row pending">
+                                                    ${entry.speaker ? html`<span class="translation-speaker" style="visibility: hidden;">${entry.speaker}</span>` : ''}
+                                                    <div class="translation-text pending-shimmer">&nbsp;</div>
+                                                </div>
+                                            `)}
+                                            ${this._liveTranslationEntry ? html`
+                                                <div class="translation-row live">
+                                                    ${this._liveTranslationEntry.speaker ? html`<span class="translation-speaker" style="visibility: hidden;">${this._liveTranslationEntry.speaker}</span>` : ''}
+                                                    <div class="translation-text live-placeholder">...</div>
+                                                </div>
+                                            ` : ''}
                                         </div>
                                     </div>
                                 </div>

@@ -170,11 +170,13 @@ User enables translation in Settings (source + target language)
 
 During Session:
   Gemini transcription -> handleTranscriptionForTranslation(text, speaker)
+  -> Buffer with space separation, track first speaker per buffer
+  -> Emit 'translation-live-update' { id, text, speaker } on each chunk (live caption)
   -> Buffer until sentence boundary or word threshold (8 words)
-  -> Queue translation request (max 20 queued, max 3 concurrent)
+  -> On flush: emit 'translation-live-update' { flushed: true }, queue translation
   -> translateText() via Gemini HTTP API (hardened prompt)
-  -> 'translation-result' event to renderer
-  -> AssistantView Translation tab displays original + translated text in side-by-side columns
+  -> 'translation-result' { id, original, translated, speaker } to renderer
+  -> AssistantView shows: live entry (green dot) -> pending (shimmer) -> finalized
 ```
 
 ### Screen Analysis Flow
@@ -277,6 +279,7 @@ storage.getAvailableModel()
 - `document-upload-progress` - Progress updates during document upload (stages: parsing, embedding, done, error)
 - `native-theme-changed` - OS theme changed (boolean: shouldUseDarkColors)
 - `translation-result` - Translation completion (original, translated, speaker, timestamp)
+- `translation-live-update` - Live transcription update for real-time caption display (id, text, speaker, flushed?)
 
 **Events (Renderer -> Main):**
 - `update-keybinds` - Keybind configuration changed

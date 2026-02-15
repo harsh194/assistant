@@ -48,6 +48,8 @@ let activeTranslations = 0;
 const MAX_TRANSLATION_QUEUE = 20;
 let translationApiKey = null;
 let translationClient = null;
+let translationPendingId = 0;
+let translationBufferSpeaker = '';
 
 const VALID_LANG_CODES = new Set([
     'en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'zh', 'ja', 'ko',
@@ -728,6 +730,8 @@ function resetTranslationState() {
     activeTranslations = 0;
     translationApiKey = null;
     translationClient = null;
+    translationBufferSpeaker = '';
+    translationPendingId = 0;
     if (translationBatchTimer) {
         clearTimeout(translationBatchTimer);
         translationBatchTimer = null;
@@ -737,9 +741,25 @@ function resetTranslationState() {
 function handleTranscriptionForTranslation(text, speakerInfo) {
     if (!translationEnabled || !translationConfig.targetLanguage) return;
 
+    // Fix: add space between concatenated chunks
+    if (translationBuffer.length > 0 && !translationBuffer.endsWith(' ')) {
+        translationBuffer += ' ';
+    }
     translationBuffer += text;
 
+    // Track speaker - use first speaker contributing to this buffer
+    if (speakerInfo && !translationBufferSpeaker) {
+        translationBufferSpeaker = speakerInfo;
+    }
+
     if (translationBatchTimer) clearTimeout(translationBatchTimer);
+
+    // Emit live update with current buffer state
+    sendToRenderer('translation-live-update', {
+        id: translationPendingId,
+        text: translationBuffer.trim(),
+        speaker: translationBufferSpeaker || speakerInfo || '',
+    });
 
     const trimmed = translationBuffer.trim();
     const hasSentenceEnd = /[.!?\u3002\uff01\uff1f\u061f\u0964]\s*$/.test(trimmed);
@@ -757,14 +777,41 @@ function handleTranscriptionForTranslation(text, speakerInfo) {
 
 function flushTranslationBuffer(speakerInfo) {
     const textToTranslate = translationBuffer.trim();
+    const flushedId = translationPendingId;
+    const flushedSpeaker = translationBufferSpeaker || speakerInfo || '';
+
+    // Reset buffer state for next cycle
     translationBuffer = '';
+    translationBufferSpeaker = '';
     translationBatchTimer = null;
-    if (!textToTranslate) return;
+    translationPendingId++;
+
+    if (!textToTranslate) {
+        // Clear live entry without creating a pending entry
+        sendToRenderer('translation-live-update', { id: flushedId, text: '', speaker: '' });
+        return;
+    }
+
+    // Signal flushed state (pending translation)
+    sendToRenderer('translation-live-update', {
+        id: flushedId,
+        text: textToTranslate,
+        speaker: flushedSpeaker,
+        flushed: true,
+    });
 
     if (translationQueue.length >= MAX_TRANSLATION_QUEUE) {
-        translationQueue.shift();
+        const dropped = translationQueue.shift();
+        sendToRenderer('translation-result', {
+            id: dropped.id,
+            original: dropped.text,
+            translated: '[Skipped - queue full]',
+            speaker: dropped.speaker,
+            timestamp: Date.now(),
+            error: true,
+        });
     }
-    translationQueue.push({ text: textToTranslate, speaker: speakerInfo || '' });
+    translationQueue.push({ text: textToTranslate, speaker: flushedSpeaker, id: flushedId });
     processTranslationQueue();
 }
 
@@ -785,6 +832,7 @@ async function translateItem(item) {
         );
         if (result.success) {
             sendToRenderer('translation-result', {
+                id: item.id,
                 original: item.text,
                 translated: result.translatedText,
                 speaker: item.speaker,
@@ -792,6 +840,7 @@ async function translateItem(item) {
             });
         } else {
             sendToRenderer('translation-result', {
+                id: item.id,
                 original: item.text,
                 translated: '[Translation failed]',
                 speaker: item.speaker,
@@ -802,6 +851,7 @@ async function translateItem(item) {
     } catch (err) {
         console.error('Translation error:', err);
         sendToRenderer('translation-result', {
+            id: item.id,
             original: item.text,
             translated: '[Translation failed]',
             speaker: item.speaker,

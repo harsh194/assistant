@@ -4,49 +4,64 @@ flowchart TB
         SYS[System Audio]
         SCREEN[Screen Capture]
     end
-    
+
     subgraph Electron[Electron Main Process]
         GW[Ghost Window]
         AC[Audio Capture]
+        SC[Screenshot Capture]
         WS[Gemini WebSocket]
         TRANS[Translation Engine]
         IPC[IPC Bridge]
     end
-    
+
     subgraph Lit[Renderer - Lit Components]
         NP[NotesParser]
         RAG[RAG Engine]
-        UI[AssistantView UI]
+        subgraph Tabs[AssistantView - 3 Tabs]
+            TAB_A[Assistant Tab A]
+            TAB_T[Translation Tab T]
+            TAB_S[Screen Tab S]
+        end
     end
-    
+
     subgraph Data[Storage]
         EMB[(Embeddings)]
         SESS[(Sessions)]
+        SA[(Screen Analyses)]
     end
-    
+
     subgraph API[Google Gemini API]
         AUDIO[Audio Stream]
         EMBED[Embeddings]
-        OCR[Vision OCR]
+        OCR[Vision / OCR]
+        TRANSL[Translation]
     end
 
     MIC --> AC
     SYS --> AC
     AC --> WS
     WS <--> AUDIO
+    WS --> IPC
+    IPC --> NP
+    NP --> TAB_A
+
+    SCREEN --> SC
+    SC --> OCR
+    OCR --> IPC
+    IPC --> TAB_S
+    TAB_S --> SA
+
     WS --> TRANS
-    TRANS --> UI
-    SCREEN --> OCR
-    OCR --> UI
+    TRANS <--> TRANSL
+    TRANS --> IPC
+    IPC --> TAB_T
+
     RAG <--> EMBED
     RAG --> EMB
-    OCR -.-> RAG
-    
-    GW -.-> UI
-    IPC <--> NP
+    RAG -.-> TAB_A
+
+    GW -.-> Tabs
     IPC <--> RAG
-    IPC <--> UI
-    WS --> IPC
-    
+
     NP --> SESS
     SESS --> DOCX[DOCX Export]

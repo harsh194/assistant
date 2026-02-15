@@ -11,6 +11,7 @@ const ALLOWED_RECEIVE_CHANNELS = [
     'document-upload-progress',
     'native-theme-changed',
     'translation-result',
+    'translation-live-update',
 ];
 
 contextBridge.exposeInMainWorld('electronAPI', {
