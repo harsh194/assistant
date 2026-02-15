@@ -356,6 +356,29 @@ export class MainView extends LitElement {
             color: var(--text-muted);
         }
 
+        .feature-expand .cloud-key-status.error {
+            color: #ff6b6b;
+            font-size: 11px;
+        }
+
+        .test-api-btn {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.1s ease;
+        }
+
+        .test-api-btn:hover:not(:disabled) {
+            background: var(--hover-background);
+        }
+
+        .test-api-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .feature-expand .screen-group {
             display: flex;
             align-items: center;
@@ -400,6 +423,8 @@ export class MainView extends LitElement {
         _googleTranslationKey: { state: true },
         _screenAutoCapture: { state: true },
         _screenInterval: { state: true },
+        _testingCloudApi: { state: true },
+        _cloudApiTestResult: { state: true },
     };
 
     constructor() {
@@ -423,6 +448,8 @@ export class MainView extends LitElement {
         this._googleTranslationKey = '';
         this._screenAutoCapture = false;
         this._screenInterval = '5';
+        this._testingCloudApi = false;
+        this._cloudApiTestResult = null;
         this._loadApiKey();
         this._loadFeatureConfig();
     }
@@ -453,6 +480,28 @@ export class MainView extends LitElement {
         } catch (error) {
             // Use defaults
         }
+    }
+
+    async _testCloudTranslationApi() {
+        if (!this._googleTranslationKey) {
+            this._cloudApiTestResult = { success: false, error: 'Please enter an API key first' };
+            this.requestUpdate();
+            return;
+        }
+
+        this._testingCloudApi = true;
+        this._cloudApiTestResult = null;
+        this.requestUpdate();
+
+        try {
+            const result = await window.electronAPI.invoke('test-cloud-translation-api', this._googleTranslationKey);
+            this._cloudApiTestResult = result;
+        } catch (error) {
+            this._cloudApiTestResult = { success: false, error: error.message };
+        }
+
+        this._testingCloudApi = false;
+        this.requestUpdate();
     }
 
     async _saveTranslationConfig() {
@@ -696,21 +745,52 @@ export class MainView extends LitElement {
                                 </div>
                                 <div class="cloud-key-section">
                                     <div class="cloud-key-label">Cloud Translation API Key</div>
-                                    <div class="cloud-key-hint">Optional — enables fast live translations</div>
-                                    <input
-                                        type="password"
-                                        class="cloud-key-input"
-                                        placeholder="Enter Google Cloud Translation key"
-                                        .value=${this._googleTranslationKey}
-                                        @change=${async e => {
-                                            this._googleTranslationKey = e.target.value;
-                                            await assistant.storage.setGoogleTranslationApiKey(e.target.value);
-                                            this.requestUpdate();
-                                        }}
-                                    />
-                                    ${this._googleTranslationKey
-                                        ? html`<div class="cloud-key-status connected">Active</div>`
-                                        : html`<div class="cloud-key-status empty">Uses Gemini when not set</div>`
+                                    <div class="cloud-key-hint">Optional — enables fast live translations (~50-100ms vs ~300-500ms)</div>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <input
+                                            type="password"
+                                            class="cloud-key-input"
+                                            placeholder="Enter Google Cloud Translation key"
+                                            .value=${this._googleTranslationKey}
+                                            @input=${e => {
+                                                this._googleTranslationKey = e.target.value;
+                                                this._cloudApiTestResult = null;
+                                            }}
+                                            @change=${async e => {
+                                                await assistant.storage.setGoogleTranslationApiKey(e.target.value);
+                                            }}
+                                            style="flex: 1;"
+                                        />
+                                        <button
+                                            class="test-api-btn"
+                                            @click=${() => this._testCloudTranslationApi()}
+                                            ?disabled=${!this._googleTranslationKey || this._testingCloudApi}
+                                            style="padding: 6px 12px; font-size: 12px; white-space: nowrap;"
+                                        >
+                                            ${this._testingCloudApi ? 'Testing...' : 'Test API'}
+                                        </button>
+                                    </div>
+                                    ${this._cloudApiTestResult
+                                        ? this._cloudApiTestResult.success
+                                            ? html`<div class="cloud-key-status connected">${this._cloudApiTestResult.message}</div>`
+                                            : html`<div class="cloud-key-status error">
+                                                <span>${this._cloudApiTestResult.error}</span>
+                                                ${this._cloudApiTestResult.needsSetup
+                                                    ? html`<a href="https://console.cloud.google.com/apis/library/translate.googleapis.com" target="_blank" style="color: #ff6b6b; text-decoration: underline; margin-left: 4px;">Enable API</a>`
+                                                    : ''
+                                                }
+                                                ${this._cloudApiTestResult.errorDetail
+                                                    ? html`<div style="font-size: 11px; opacity: 0.9; margin-top: 4px; word-break: break-word;">${this._cloudApiTestResult.errorDetail}</div>`
+                                                    : ''
+                                                }
+                                                ${this._cloudApiTestResult.needsSetup
+                                                    ? html`<div style="font-size: 11px; opacity: 0.85; margin-top: 4px;">Use the same GCP project as this API key. Wait a few minutes after enabling, then test again.</div>`
+                                                    : ''
+                                                }
+                                            </div>`
+                                        : this._googleTranslationKey
+                                            ? html`<div class="cloud-key-status connected">Click "Test API" to verify</div>`
+                                            : html`<div class="cloud-key-status empty">Uses Gemini when not set (slower)</div>`
                                     }
                                 </div>
                             </div>
