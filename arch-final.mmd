@@ -37,6 +37,8 @@ flowchart TB
         TRANSL[Translation]
     end
 
+    GCLOUD[Google Cloud Translation API]
+
     MIC --> AC
     SYS --> AC
     AC --> WS
@@ -52,7 +54,8 @@ flowchart TB
     TAB_S --> SA
 
     WS --> TRANS
-    TRANS <--> TRANSL
+    TRANS <--> GCLOUD
+    TRANS <-.-> TRANSL
     TRANS --> IPC
     IPC --> TAB_T
 

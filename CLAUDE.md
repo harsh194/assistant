@@ -22,6 +22,7 @@ Electron-based AI assistant using Google Gemini API. Features include:
 
 - **Runtime**: Electron 30.x with Electron Forge
 - **AI**: Google Gemini API (@google/genai)
+- **Translation**: Google Cloud Translation API (primary, ~50-100ms) with Gemini fallback (~1-3s)
 - **UI**: Lit web components (vanilla JS, no build step)
 - **Markdown**: Marked.js + Highlight.js for code rendering
 - **Storage**: JSON file-based persistence

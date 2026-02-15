@@ -54,7 +54,7 @@ During critical real-time conversations (interviews, sales calls, negotiations),
 
 5. **Tabbed Session Interface**
    - **Assistant Tab (A)**: Real-time AI response display with Markdown rendering and response navigation
-   - **Translation Tab (T)**: Real-time translation across 28 languages with side-by-side display and speaker labels
+   - **Translation Tab (T)**: Real-time translation across 28 languages with side-by-side display, speaker labels, and live tentative translations via Google Cloud Translation API
    - **Screen Tab (S)**: AI-powered screenshot analysis (auto/manual) with timestamps, thumbnails, and search
    - Instant tab switching via keyboard shortcuts (A/T/S/Tab)
    - New analysis indicator when results arrive while on another tab
@@ -123,7 +123,7 @@ During critical real-time conversations (interviews, sales calls, negotiations),
 2. **AI Response** -> Notes parser -> Visible layer / Silent layer separation
 3. **Document Upload** -> Chunking -> Embedding generation -> Local JSON storage
 4. **Conversation Progress** -> RAG engine -> Relevant chunk retrieval -> Context injection
-5. **Translation** -> Speech detection -> Buffering -> Gemini Translation API -> Translation tab side-by-side display
+5. **Translation** -> Speech detection -> Buffering -> Google Cloud Translation API (primary, ~50-100ms) with Gemini fallback (~1-3s) -> Translation tab with live tentative translations
 6. **Screen Analysis** -> Screenshot capture -> Gemini Vision API -> Screen tab with timestamped results and thumbnails
 7. **Session End** -> Structured notes generation -> .docx export
 
@@ -623,6 +623,8 @@ When translation is enabled (28 supported languages), this tab displays a side-b
 
 The translation pipeline buffers speech until sentence boundaries (or 8 words), queues requests (max 3 concurrent), and routes results exclusively to this tab. Speaker labels (USER/SPEAKER) help track who said what across both languages.
 
+A key innovation is **tentative real-time translation**: when a Google Cloud Translation API key is configured, the right column shows a dimmed, italic tentative translation that updates live as the user speaks (~50-100ms latency). When the buffer flushes at a sentence boundary, the final translation replaces the tentative one. If the Cloud Translation API is unavailable, the system falls back to Gemini translation (~1-3s).
+
 ### Screen Tab (S) -- AI-Powered Screen Analysis
 
 Screenshots are captured either automatically (on a configurable interval) or manually via the "Analyze screen" button. Each capture is sent to the Gemini Vision API for analysis, and the results are displayed as timestamped entries with:
@@ -815,11 +817,13 @@ This project leverages **5 core capabilities of the Gemini API**:
    - Auto/manual screenshot AI analysis
    - Real-time interpretation and summarization of on-screen information
 
-4. **Translation API (HTTP)** -> Translation Tab
+4. **Translation API (HTTP) + Google Cloud Translation API** -> Translation Tab
    - Real-time translation across 28 languages
+   - Google Cloud Translation API for tentative live translations (~50-100ms)
+   - Gemini API as high-quality fallback (~1-3s)
    - Natural translation quality via sentence-boundary buffering
    - Max 3 concurrent translation requests, 20-request queue limit
-   - Side-by-side display with speaker labels
+   - Side-by-side display with speaker labels and live tentative preview
 
 5. **Summary Generation (HTTP)** -> Post-Session
    - Structured summary generation for entire sessions
@@ -979,7 +983,7 @@ storage.setCredentials({ apiKey: encryptedKey });
 
 ### Open Source Transparency
 
-**License**: GPL-3.0
+**License**: MIT
 **GitHub**: https://github.com/harsh194/assistant
 
 - Full source code available
@@ -1068,8 +1072,8 @@ This project was made possible by the following technologies and communities:
 
 ## License
 
-GPL-3.0 License
+MIT License
 
-Copyright (c) 2024 Assistant Contributors
+Copyright (c) 2026
 
 This project is open source. Free to use, modify, and redistribute. See the [LICENSE](LICENSE) file for details.
