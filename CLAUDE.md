@@ -108,7 +108,7 @@ src/
 ### Storage Domains
 
 - **Config** (`config.json`): App configuration (`configVersion`, `onboarded`, `layout`)
-- **Credentials** (`credentials.json`): API keys
+- **Credentials** (`credentials.json`): API keys (`apiKey` for Gemini, `googleTranslationApiKey` for Google Cloud Translation)
 - **Preferences** (`preferences.json`): User preferences (profile, language, audio mode, font size, transparency, translation config, screenshot settings, Google Search toggle)
 - **Keybinds** (`keybinds.json`): Keyboard shortcuts
 - **Limits** (`limits.json`): Daily rate limiting per model (`gemini-2.5-flash`: 20/day, `gemini-2.5-flash-lite`: 20/day)
@@ -167,16 +167,20 @@ Tabs: [Assistant (A)] [Translation (T)] [Screen (S)]
 User enables translation in Settings (source + target language)
   -> IPC 'translation:set-config' -> gemini.setTranslationConfig()
   -> Speech language updated to match source language
+  -> Optional: Configure Google Cloud Translation API key for real-time tentative translation
 
 During Session:
   Gemini transcription -> handleTranscriptionForTranslation(text, speaker)
   -> Buffer with space separation, track first speaker per buffer
   -> Emit 'translation-live-update' { id, text, speaker } on each chunk (live caption)
+  -> If Cloud Translation key configured:
+     -> Debounced (150ms) Cloud Translation API call for current buffer
+     -> Emit 'translation-live-update' with tentativeTranslation (dimmed/italic in right column)
   -> Buffer until sentence boundary or word threshold (8 words)
   -> On flush: emit 'translation-live-update' { flushed: true }, queue translation
-  -> translateText() via Gemini HTTP API (hardened prompt)
+  -> translateText(): Cloud Translation API first (~50-100ms), Gemini fallback (~1-3s)
   -> 'translation-result' { id, original, translated, speaker } to renderer
-  -> AssistantView shows: live entry (green dot) -> pending (shimmer) -> finalized
+  -> AssistantView shows: live entry (green dot + tentative) -> pending (shimmer) -> finalized
 ```
 
 ### Screen Analysis Flow
@@ -216,6 +220,7 @@ storage.getAvailableModel()
 **Storage:**
 - `storage:get-config`, `storage:set-config`, `storage:update-config`
 - `storage:get-credentials`, `storage:set-credentials`, `storage:get-api-key`, `storage:set-api-key`
+- `storage:get-google-translation-key`, `storage:set-google-translation-key` - Google Cloud Translation API key
 - `storage:get-preferences`, `storage:set-preferences`, `storage:update-preference`
 - `storage:get-keybinds`, `storage:set-keybinds`
 - `storage:get-all-sessions`, `storage:get-session`, `storage:save-session`, `storage:delete-session`, `storage:delete-all-sessions`
@@ -279,7 +284,7 @@ storage.getAvailableModel()
 - `document-upload-progress` - Progress updates during document upload (stages: parsing, embedding, done, error)
 - `native-theme-changed` - OS theme changed (boolean: shouldUseDarkColors)
 - `translation-result` - Translation completion (original, translated, speaker, timestamp)
-- `translation-live-update` - Live transcription update for real-time caption display (id, text, speaker, flushed?)
+- `translation-live-update` - Live transcription update for real-time caption display (id, text, speaker, flushed?, tentativeTranslation?)
 
 **Events (Renderer -> Main):**
 - `update-keybinds` - Keybind configuration changed

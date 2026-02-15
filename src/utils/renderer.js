@@ -52,6 +52,13 @@ const storage = {
     async setApiKey(apiKey) {
         return api.invoke('storage:set-api-key', apiKey);
     },
+    async getGoogleTranslationApiKey() {
+        const result = await api.invoke('storage:get-google-translation-key');
+        return result.success ? result.data : '';
+    },
+    async setGoogleTranslationApiKey(apiKey) {
+        return api.invoke('storage:set-google-translation-key', apiKey);
+    },
 
     // Preferences
     async getPreferences() {

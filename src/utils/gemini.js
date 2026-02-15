@@ -50,6 +50,8 @@ let translationApiKey = null;
 let translationClient = null;
 let translationPendingId = 0;
 let translationBufferSpeaker = '';
+let googleCloudTranslationKey = null;
+let tentativeTranslationTimer = null;
 
 const VALID_LANG_CODES = new Set([
     'en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'zh', 'ja', 'ko',
@@ -290,6 +292,12 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
         sessionParams = { apiKey, customPrompt, profile, language, copilotPrep, customProfileData };
         reconnectAttempts = 0;
         translationApiKey = apiKey;
+        try {
+            const storage = require('../storage');
+            googleCloudTranslationKey = storage.getGoogleTranslationApiKey() || null;
+        } catch (err) {
+            googleCloudTranslationKey = null;
+        }
     }
 
     const client = new GoogleGenAI({
@@ -725,6 +733,12 @@ function getTranslationConfig() {
 }
 
 function resetTranslationState() {
+    if (tentativeTranslationTimer) {
+        clearTimeout(tentativeTranslationTimer);
+        tentativeTranslationTimer = null;
+    }
+    googleCloudTranslationKey = null;
+    lastTentativeCallTime = 0;
     translationBuffer = '';
     translationQueue = [];
     activeTranslations = 0;
@@ -740,6 +754,9 @@ function resetTranslationState() {
 
 function handleTranscriptionForTranslation(text, speakerInfo) {
     if (!translationEnabled || !translationConfig.targetLanguage) return;
+
+    // Only translate the other person's speech (Speaker 2), not the user's (Speaker 1)
+    if (speakerInfo === 'Speaker 1') return;
 
     // Fix: add space between concatenated chunks
     if (translationBuffer.length > 0 && !translationBuffer.endsWith(' ')) {
@@ -761,6 +778,15 @@ function handleTranscriptionForTranslation(text, speakerInfo) {
         speaker: translationBufferSpeaker || speakerInfo || '',
     });
 
+    // Schedule tentative translation if Cloud API key is configured
+    if (googleCloudTranslationKey) {
+        scheduleTentativeTranslation(
+            translationPendingId,
+            translationBuffer.trim(),
+            translationBufferSpeaker || speakerInfo || ''
+        );
+    }
+
     const trimmed = translationBuffer.trim();
     const hasSentenceEnd = /[.!?\u3002\uff01\uff1f\u061f\u0964]\s*$/.test(trimmed);
     const wordCount = trimmed.split(/\s+/).length;
@@ -776,6 +802,12 @@ function handleTranscriptionForTranslation(text, speakerInfo) {
 }
 
 function flushTranslationBuffer(speakerInfo) {
+    // Clear any pending tentative translation for this buffer
+    if (tentativeTranslationTimer) {
+        clearTimeout(tentativeTranslationTimer);
+        tentativeTranslationTimer = null;
+    }
+
     const textToTranslate = translationBuffer.trim();
     const flushedId = translationPendingId;
     const flushedSpeaker = translationBufferSpeaker || speakerInfo || '';
@@ -872,7 +904,70 @@ function getTranslationClient() {
     return translationClient;
 }
 
+async function translateWithCloudAPI(text, sourceLang, targetLang) {
+    if (!googleCloudTranslationKey) return null;
+
+    const url = `https://translation.googleapis.com/language/translate/v2?key=${googleCloudTranslationKey}`;
+    const body = { q: text, target: targetLang, format: 'text' };
+    if (sourceLang) body.source = sourceLang;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `Cloud Translation HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (data.data?.translations?.[0]) {
+        return data.data.translations[0].translatedText;
+    }
+    throw new Error(data.error?.message || 'Cloud Translation failed');
+}
+
+let lastTentativeCallTime = 0;
+const TENTATIVE_DEBOUNCE_MS = 150;
+
+function scheduleTentativeTranslation(id, text, speaker) {
+    if (tentativeTranslationTimer) clearTimeout(tentativeTranslationTimer);
+
+    const now = Date.now();
+    const timeSinceLastCall = now - lastTentativeCallTime;
+
+    // Fire immediately if first call or enough time has passed, otherwise debounce
+    const delay = timeSinceLastCall >= TENTATIVE_DEBOUNCE_MS ? 0 : TENTATIVE_DEBOUNCE_MS;
+
+    tentativeTranslationTimer = setTimeout(async () => {
+        lastTentativeCallTime = Date.now();
+        try {
+            const translated = await translateWithCloudAPI(
+                text, translationConfig.sourceLanguage, translationConfig.targetLanguage
+            );
+            if (translated) {
+                sendToRenderer('translation-live-update', {
+                    id, text, speaker,
+                    tentativeTranslation: translated
+                });
+            }
+        } catch (err) {
+            // Silently fail - tentative translation is best-effort
+        }
+    }, delay);
+}
+
 async function translateText(text, sourceLang, targetLang) {
+    // Try Cloud Translation API first (fast ~50-100ms)
+    try {
+        const cloudResult = await translateWithCloudAPI(text, sourceLang, targetLang);
+        if (cloudResult) return { success: true, translatedText: cloudResult };
+    } catch (err) {
+        console.warn('Cloud Translation failed, falling back to Gemini:', err.message);
+    }
+
     const ai = getTranslationClient();
     if (!ai) {
         return { success: false, error: 'No API key for translation' };

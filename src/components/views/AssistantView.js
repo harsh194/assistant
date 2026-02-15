@@ -517,6 +517,12 @@ export class AssistantView extends LitElement {
             font-size: 12px;
             color: var(--text-muted);
         }
+
+        .translation-text.tentative {
+            opacity: 0.6;
+            font-style: italic;
+            color: var(--text-secondary);
+        }
     `;
 
     static properties = {
@@ -783,16 +789,36 @@ export class AssistantView extends LitElement {
             // Live translation update listener
             this._cleanups.push(window.electronAPI.on('translation-live-update', (data) => {
                 if (data.flushed) {
+                    // Carry over tentative translation from live entry if available
+                    const tentative = this._liveTranslationEntry?.tentativeTranslation || null;
                     this._pendingTranslationEntries = [
                         ...this._pendingTranslationEntries,
-                        { id: data.id, text: data.text, speaker: data.speaker }
+                        { id: data.id, text: data.text, speaker: data.speaker, tentativeTranslation: tentative }
                     ];
                     this._liveTranslationEntry = null;
+                } else if (data.tentativeTranslation && !data.text) {
+                    // Late tentative translation for already-flushed entry — update pending
+                    const idx = this._pendingTranslationEntries.findIndex(e => e.id === data.id);
+                    if (idx !== -1) {
+                        this._pendingTranslationEntries = this._pendingTranslationEntries.map(
+                            e => e.id === data.id ? { ...e, tentativeTranslation: data.tentativeTranslation } : e
+                        );
+                    }
                 } else if (data.text) {
+                    // Check if this is a tentative update for a pending entry (arrived after flush)
+                    if (data.tentativeTranslation) {
+                        const idx = this._pendingTranslationEntries.findIndex(e => e.id === data.id);
+                        if (idx !== -1) {
+                            this._pendingTranslationEntries = this._pendingTranslationEntries.map(
+                                e => e.id === data.id ? { ...e, tentativeTranslation: data.tentativeTranslation } : e
+                            );
+                        }
+                    }
                     this._liveTranslationEntry = {
                         id: data.id,
                         text: data.text,
                         speaker: data.speaker,
+                        tentativeTranslation: data.tentativeTranslation || null,
                     };
                 } else {
                     this._liveTranslationEntry = null;
@@ -1162,13 +1188,19 @@ export class AssistantView extends LitElement {
                                             ${this._pendingTranslationEntries.map(entry => html`
                                                 <div class="translation-row pending">
                                                     ${entry.speaker ? html`<span class="translation-speaker" style="visibility: hidden;">${entry.speaker}</span>` : ''}
-                                                    <div class="translation-text pending-shimmer">&nbsp;</div>
+                                                    ${entry.tentativeTranslation
+                                                        ? html`<div class="translation-text tentative">${entry.tentativeTranslation}</div>`
+                                                        : html`<div class="translation-text pending-shimmer">&nbsp;</div>`
+                                                    }
                                                 </div>
                                             `)}
                                             ${this._liveTranslationEntry ? html`
                                                 <div class="translation-row live">
                                                     ${this._liveTranslationEntry.speaker ? html`<span class="translation-speaker" style="visibility: hidden;">${this._liveTranslationEntry.speaker}</span>` : ''}
-                                                    <div class="translation-text live-placeholder">...</div>
+                                                    ${this._liveTranslationEntry.tentativeTranslation
+                                                        ? html`<div class="translation-text tentative">${this._liveTranslationEntry.tentativeTranslation}</div>`
+                                                        : html`<div class="translation-text live-placeholder">...</div>`
+                                                    }
                                                 </div>
                                             ` : ''}
                                         </div>

@@ -266,6 +266,64 @@ export class MainView extends LitElement {
             outline: none;
             border-color: var(--border-default);
         }
+
+        .cloud-key-section {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .cloud-key-label {
+            font-size: 10px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-bottom: 3px;
+        }
+
+        .cloud-key-hint {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+
+        .cloud-key-input {
+            background: var(--input-background);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 6px 8px;
+            width: 100%;
+            border-radius: var(--border-radius);
+            font-size: 12px;
+            transition: border-color 0.15s ease;
+        }
+
+        .cloud-key-input:focus {
+            outline: none;
+            border-color: var(--border-default);
+        }
+
+        .cloud-key-input::placeholder {
+            color: var(--placeholder-color);
+        }
+
+        .cloud-key-status {
+            font-size: 10px;
+            margin-top: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .cloud-key-status.connected {
+            color: var(--success-color, #4caf50);
+        }
+
+        .cloud-key-status.empty {
+            color: var(--text-muted);
+        }
     `;
 
     static properties = {
@@ -281,6 +339,7 @@ export class MainView extends LitElement {
         _translationEnabled: { state: true },
         _translationSourceLang: { state: true },
         _translationTargetLang: { state: true },
+        _googleTranslationKey: { state: true },
     };
 
     constructor() {
@@ -299,6 +358,7 @@ export class MainView extends LitElement {
         this._translationEnabled = false;
         this._translationSourceLang = '';
         this._translationTargetLang = '';
+        this._googleTranslationKey = '';
         this._loadApiKey();
         this._loadTranslationConfig();
     }
@@ -314,6 +374,8 @@ export class MainView extends LitElement {
             this._translationEnabled = config.enabled || false;
             this._translationSourceLang = config.sourceLanguage || '';
             this._translationTargetLang = config.targetLanguage || '';
+            const gtKey = await assistant.storage.getGoogleTranslationApiKey();
+            this._googleTranslationKey = gtKey || '';
         } catch (error) {
             // Use defaults
         }
@@ -548,6 +610,25 @@ export class MainView extends LitElement {
                                     `)}
                                 </select>
                             </div>
+                        </div>
+                        <div class="cloud-key-section">
+                            <div class="cloud-key-label">Cloud Translation API Key</div>
+                            <div class="cloud-key-hint">Optional — enables fast live translations as others speak</div>
+                            <input
+                                type="password"
+                                class="cloud-key-input"
+                                placeholder="Enter Google Cloud Translation key"
+                                .value=${this._googleTranslationKey}
+                                @change=${async e => {
+                                    this._googleTranslationKey = e.target.value;
+                                    await assistant.storage.setGoogleTranslationApiKey(e.target.value);
+                                    this.requestUpdate();
+                                }}
+                            />
+                            ${this._googleTranslationKey
+                                ? html`<div class="cloud-key-status connected">Active</div>`
+                                : html`<div class="cloud-key-status empty">Uses Gemini for translation when not set</div>`
+                            }
                         </div>
                     ` : ''}
                     </div>

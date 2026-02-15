@@ -124,6 +124,25 @@ function setupStorageIpcHandlers() {
         }
     });
 
+    ipcMain.handle('storage:get-google-translation-key', async () => {
+        try {
+            return { success: true, data: storage.getGoogleTranslationApiKey() };
+        } catch (error) {
+            console.error('Error getting Google Translation API key:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('storage:set-google-translation-key', async (event, apiKey) => {
+        try {
+            storage.setGoogleTranslationApiKey(apiKey);
+            return { success: true };
+        } catch (error) {
+            console.error('Error setting Google Translation API key:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
     // ============ PREFERENCES ============
     ipcMain.handle('storage:get-preferences', async () => {
         try {

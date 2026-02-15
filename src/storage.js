@@ -12,7 +12,8 @@ const DEFAULT_CONFIG = {
 };
 
 const DEFAULT_CREDENTIALS = {
-    apiKey: ''
+    apiKey: '',
+    googleTranslationApiKey: ''
 };
 
 const DEFAULT_PREFERENCES = {
@@ -218,6 +219,14 @@ function getApiKey() {
 
 function setApiKey(apiKey) {
     return setCredentials({ apiKey });
+}
+
+function getGoogleTranslationApiKey() {
+    return getCredentials().googleTranslationApiKey || '';
+}
+
+function setGoogleTranslationApiKey(googleTranslationApiKey) {
+    return setCredentials({ googleTranslationApiKey });
 }
 
 // ============ PREFERENCES ============
@@ -591,6 +600,8 @@ module.exports = {
     setCredentials,
     getApiKey,
     setApiKey,
+    getGoogleTranslationApiKey,
+    setGoogleTranslationApiKey,
 
     // Preferences
     getPreferences,
